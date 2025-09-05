@@ -2,12 +2,12 @@
 rel="stylesheet" href="{% static "coins/style.css" %}"> {% endblock extra_css %}
 {% block content %}
 <div class="container">
-  <table class="table table-hover">
+  <table class="table table-hover text-center">
     <thead>
       <tr>
         <th>#</th>
         <th>Coin</th>
-        <th>Current price</th>
+        <th>Price</th>
         <th>24h</th>
         <th>7d</th>
         <th>ATH</th>
@@ -18,7 +18,7 @@ rel="stylesheet" href="{% static "coins/style.css" %}"> {% endblock extra_css %}
 
     <tbody>
       {% for coin in coin_list %}
-      <tr class="text-center">
+      <tr>
         <th>{{ coin.market_cap_rank }}</th>
         <td>{{ coin.name }} - {{ coin.symbol }}</td>
         <td>{{ coin.current_price }}</td>
