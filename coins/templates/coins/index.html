@@ -1,0 +1,36 @@
+{% extends "base.html" %} {% load static %} {% block extra_css %} <link
+rel="stylesheet" href="{% static "coins/style.css" %}"> {% endblock extra_css %}
+{% block content %}
+<div class="container">
+  <table class="table table-hover">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Coin</th>
+        <th>Current price</th>
+        <th>24h</th>
+        <th>7d</th>
+        <th>ATH</th>
+        <th>24h Volume</th>
+        <th>Market Cap</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for coin in coin_list %}
+      <tr class="text-center">
+        <th>{{ coin.market_cap_rank }}</th>
+        <td>{{ coin.name }} - {{ coin.symbol }}</td>
+        <td>{{ coin.current_price }}</td>
+        <td>{{ coin.price_change_percentage_24h_in_currency }}</td>
+        <td>{{ coin.price_change_percentage_7d_in_currency }}</td>
+        <td>{{ coin.ath }}</td>
+        <td>{{ coin.total_volume }}</td>
+        <td>{{ coin.market_cap }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock content %}
