@@ -1,12 +1,10 @@
-{% extends "base.html" %} {% load static %} {% block extra_css %} <link
-rel="stylesheet" href="{% static "coins/style.css" %}"> {% endblock extra_css %}
-{% block content %}
+{% extends "base.html" %} {% block content %}
 <div class="container">
   <table class="table table-hover text-center">
-    <thead>
+    <thead class="position-sticky top-0 bg-light">
       <tr>
         <th>#</th>
-        <th>Coin</th>
+        <th class="text-start">Coin</th>
         <th>Price</th>
         <th>24h</th>
         <th>7d</th>
@@ -20,13 +18,24 @@ rel="stylesheet" href="{% static "coins/style.css" %}"> {% endblock extra_css %}
       {% for coin in coin_list %}
       <tr>
         <th>{{ coin.market_cap_rank }}</th>
-        <td>{{ coin.name }} - {{ coin.symbol }}</td>
-        <td>{{ coin.current_price }}</td>
-        <td>{{ coin.price_change_percentage_24h_in_currency }}</td>
-        <td>{{ coin.price_change_percentage_7d_in_currency }}</td>
-        <td>{{ coin.ath }}</td>
-        <td>{{ coin.total_volume }}</td>
-        <td>{{ coin.market_cap }}</td>
+        <td class="text-start">
+          {{ coin.name }} -
+          <span class="fw-bold text-primary">{{ coin.symbol }}</span>
+        </td>
+        <td>${{ coin.current_price|floatformat:'g' }}</td>
+        <td
+          class="{% if coin.price_change_percentage_24h_in_currency > 0 %}text-success{% else %}text-danger{% endif %}"
+        >
+          {{ coin.price_change_percentage_24h_in_currency|floatformat:1 }}%
+        </td>
+        <td
+          class="{% if coin.price_change_percentage_24h_in_currency > 0 %}text-success{% else %}text-danger{% endif %}"
+        >
+          {{ coin.price_change_percentage_7d_in_currency|floatformat:1 }}%
+        </td>
+        <td>${{ coin.ath|floatformat:'g' }}</td>
+        <td>${{ coin.total_volume|floatformat:'g' }}</td>
+        <td>${{ coin.market_cap|floatformat:'g' }}</td>
       </tr>
       {% endfor %}
     </tbody>
