@@ -3,8 +3,8 @@ import requests
 import threading
 
 
-API_KEY = settings.COINGECKO_KEY
-ENDPOINT = settings.COINGECKO_ENDPOINT
+CG_API_KEY = settings.COINGECKO_KEY
+CG_URL = settings.COINGECKO_ENDPOINT
 
 _thread_local = threading.local()
 
@@ -12,7 +12,7 @@ _thread_local = threading.local()
 def _get_session():
     if not hasattr(_thread_local, "session"):
         session = requests.Session()
-        session.headers.update({"x-cg-demo-api-key": API_KEY})
+        session.headers.update({"x-cg-demo-api-key": CG_API_KEY})
         _thread_local.session = session
 
     return _thread_local.session
@@ -20,7 +20,7 @@ def _get_session():
 
 def get_coin_list_with_data():
     res = _get_session().get(
-        ENDPOINT + "coins/markets",
+        CG_URL + "coins/markets",
         params={
             "vs_currency": "usd",
             "order": "market_cap_desc",
