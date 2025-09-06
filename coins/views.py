@@ -10,5 +10,4 @@ class IndexView(TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["coin_list"] = get_coin_list_with_data()
-        pprint(context["coin_list"])
         return context
