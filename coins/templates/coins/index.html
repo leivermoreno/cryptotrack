@@ -40,6 +40,16 @@
       {% endfor %}
     </tbody>
   </table>
+
+  <div class="pagination py-3 d-flex justify-content-end">
+    {% if page > 1 %}
+      <a href="{% url "coins:index" %}?page={{ page|add:'-1' }}" class='text-decoration-none me-3'>prev</a>
+    {% endif %}
+    {{ page }}
+    {% if page < page_count %}
+      <a href="{% url "coins:index" %}?page={{ page|add:'1' }}" class='text-decoration-none ms-3'> next</a>
+    {% endif %}
+  </div>
 </div>
 
 {% endblock content %}
