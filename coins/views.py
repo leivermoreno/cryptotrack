@@ -1,7 +1,7 @@
 from pprint import pprint
 from django.shortcuts import render
 from django.views.generic import TemplateView
-from coins.services import get_coin_list
+from coins.services import get_coin_list_with_data
 
 
 class IndexView(TemplateView):
@@ -9,6 +9,6 @@ class IndexView(TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["coin_list"] = get_coin_list()
+        context["coin_list"] = get_coin_list_with_data()
         pprint(context["coin_list"])
         return context

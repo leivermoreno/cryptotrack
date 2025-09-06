@@ -18,7 +18,7 @@ def _get_session():
     return _thread_local.session
 
 
-def get_coin_list():
+def get_coin_list_with_data():
     res = _get_session().get(
         ENDPOINT + "coins/markets",
         params={
