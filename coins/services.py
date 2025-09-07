@@ -10,6 +10,7 @@ CG_API_KEY = settings.COINGECKO_KEY
 CG_URL = settings.COINGECKO_ENDPOINT
 RESULTS_PAGE = 100
 COIN_COUNT_TIMEOUT = settings.CACHE_TIMEOUT_COIN_COUNT
+PAGE_DATA_TIMEOUT = settings.CACHE_TIMEOUT_PAGE_DATA
 
 _thread_local = threading.local()
 
@@ -61,6 +62,6 @@ def get_coin_list_with_data(page):
             )
             .json()
         )
-        cache.set(f"coin_list_page_{page}", res, 60)
+        cache.set(f"coin_list_page_{page}", res, PAGE_DATA_TIMEOUT)
 
         return res
