@@ -17,7 +17,7 @@
     <tbody>
       {% for coin in coin_list %}
       <tr>
-        <th>{{ coin.market_cap_rank }}</th>
+        <th>{{ coin.market_cap_rank|default:"-" }}</th>
         <td class="text-start">
           {{ coin.name }} -
           <span class="fw-bold text-primary">{{ coin.symbol }}</span>
