@@ -44,15 +44,23 @@ def get_page_count():
 
 
 def get_coin_list_with_data(page):
-    res = _get_session().get(
-        CG_URL + "coins/markets",
-        params={
-            "vs_currency": "usd",
-            "order": "market_cap_desc",
-            "page": page,
-            "per_page": 100,
-            "price_change_percentage": "24h,7d",
-        },
-    )
+    if cache.has_key(f"coin_list_page_{page}"):
+        return cache.get(f"coin_list_page_{page}")
+    else:
+        res = (
+            _get_session()
+            .get(
+                CG_URL + "coins/markets",
+                params={
+                    "vs_currency": "usd",
+                    "order": "market_cap_desc",
+                    "page": page,
+                    "per_page": 100,
+                    "price_change_percentage": "24h,7d",
+                },
+            )
+            .json()
+        )
+        cache.set(f"coin_list_page_{page}", res, 60)
 
-    return res.json()
+        return res
