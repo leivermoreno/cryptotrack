@@ -2,6 +2,7 @@ import threading
 import math
 
 from django.conf import settings
+from django.core.cache import cache
 import requests
 
 
@@ -32,7 +33,7 @@ def get_coin_list():
 
 
 def get_coin_count():
-    return len(get_coin_list().json())
+    return cache.get_or_set("coin_count", len(get_coin_list().json()), 60 * 60)
 
 
 def get_page_count():
