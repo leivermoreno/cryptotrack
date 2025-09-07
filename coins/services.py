@@ -9,6 +9,7 @@ import requests
 CG_API_KEY = settings.COINGECKO_KEY
 CG_URL = settings.COINGECKO_ENDPOINT
 RESULTS_PAGE = 100
+COIN_COUNT_TIMEOUT = settings.CACHE_TIMEOUT_COIN_COUNT
 
 _thread_local = threading.local()
 
@@ -33,7 +34,9 @@ def get_coin_list():
 
 
 def get_coin_count():
-    return cache.get_or_set("coin_count", len(get_coin_list().json()), 60 * 60)
+    return cache.get_or_set(
+        "coin_count", len(get_coin_list().json()), COIN_COUNT_TIMEOUT
+    )
 
 
 def get_page_count():

@@ -1,5 +1,8 @@
 from django.shortcuts import render
+from django.conf import settings
 from coins.services import get_page_count, get_coin_list_with_data
+
+INDEX_TABLE_TIMEOUT = settings.CACHE_TIMEOUT_INDEX_TABLE
 
 
 def render_index(request):
@@ -19,5 +22,6 @@ def render_index(request):
             "page": page,
             "page_count": page_count,
             "coin_list": coin_list,
+            "table_timeout": INDEX_TABLE_TIMEOUT,
         },
     )

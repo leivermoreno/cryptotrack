@@ -91,6 +91,9 @@ CACHES = {
     }
 }
 
+CACHE_TIMEOUT_COIN_COUNT = 60 * 60
+CACHE_TIMEOUT_INDEX_TABLE = 60
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

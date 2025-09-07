@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="container">
-  {% cache 60 index_table %}
+  {% cache table_timeout index_table %}
   <table class="table table-hover text-center">
     <thead class="position-sticky top-0 bg-light">
       <tr>
