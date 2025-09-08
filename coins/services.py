@@ -11,6 +11,16 @@ CG_URL = settings.COINGECKO_ENDPOINT
 RESULTS_PAGE = 100
 COIN_COUNT_TIMEOUT = settings.CACHE_TIMEOUT_COIN_COUNT
 PAGE_DATA_TIMEOUT = settings.CACHE_TIMEOUT_PAGE_DATA
+ALLOWED_SORTS = {
+    "rank": "market_cap_rank",
+    "coin": "name",
+    "price": "current_price",
+    "price_change_24h": "price_change_percentage_24h_in_currency",
+    "price_change_7d": "price_change_percentage_7d_in_currency",
+    "ath": "ath",
+    "volume": "total_volume",
+    "market_cap": "market_cap",
+}
 
 _thread_local = threading.local()
 
@@ -44,11 +54,11 @@ def get_page_count():
     return math.ceil(get_coin_count() / RESULTS_PAGE)
 
 
-def get_coin_list_with_data(page):
+def get_coin_list_with_data(page, sort, direction):
     if cache.has_key(f"coin_list_page_{page}"):
-        return cache.get(f"coin_list_page_{page}")
+        data = cache.get(f"coin_list_page_{page}")
     else:
-        res = (
+        data = (
             _get_session()
             .get(
                 CG_URL + "coins/markets",
@@ -62,6 +72,17 @@ def get_coin_list_with_data(page):
             )
             .json()
         )
-        cache.set(f"coin_list_page_{page}", res, PAGE_DATA_TIMEOUT)
+        cache.set(f"coin_list_page_{page}", data, PAGE_DATA_TIMEOUT)
 
-        return res
+    return _sort_coin_list(data, sort, direction)
+
+
+def _sort_coin_list(data, sort, direction):
+    if sort == "rank" and direction == "asc":
+        return data
+
+    reverse = direction == "desc"
+    key = ALLOWED_SORTS[sort]
+    data.sort(key=lambda x: x.get(key) or 0, reverse=reverse)
+
+    return data

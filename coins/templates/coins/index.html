@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load cache %}
+{% load coin_extras %}
 
 {% block title %}Home{% endblock title %}
 
@@ -8,14 +9,14 @@
   <table class="table table-hover text-center">
     <thead class="position-sticky top-0 bg-light">
       <tr>
-        <th>#</th>
-        <th class="text-start">Coin</th>
-        <th>Price</th>
-        <th>24h</th>
-        <th>7d</th>
-        <th>ATH</th>
-        <th>24h Volume</th>
-        <th>Market Cap</th>
+        <th>{% sort_link 'rank' page sort direction '#' %}</th>
+        <th class="text-start">{% sort_link 'coin' page sort direction 'Coin' %}</th>
+        <th>{% sort_link 'price' page sort direction 'Price' %}</th>
+        <th>{% sort_link 'price_change_24h' page sort direction '24h' %}</th>
+        <th>{% sort_link 'price_change_7d' page sort direction '7d' %}</th>
+        <th>{% sort_link 'ath' page sort direction 'ATH' %}</th>
+        <th>{% sort_link 'volume' page sort direction '24h Volume' %}</th>
+        <th>{% sort_link 'market_cap' page sort direction 'Market Cap' %}</th>
       </tr>
     </thead>
 
