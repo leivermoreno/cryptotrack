@@ -1,4 +1,5 @@
 from django import template
+from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
 register = template.Library()
@@ -15,7 +16,7 @@ def sort_link(key, page, current_sort, current_direction, content):
         else:
             arrow = "&#8595;"
 
-    href = f"?page={page}&sort={key}&direction={direction}"
-    html = f"<a class='text-decoration-none' href='{href}'>{content} {arrow}</a>"
+    html_template = "<a class='text-decoration-none' href='?page={}&sort={}&direction={}'>{} {}</a>"
+    html = format_html(html_template, page, key, direction, content, mark_safe(arrow))
 
-    return mark_safe(html)
+    return html
