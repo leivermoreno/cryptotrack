@@ -35,7 +35,7 @@
           {{ coin.price_change_percentage_24h_in_currency|floatformat:1 }}%
         </td>
         <td
-          class="{% if coin.price_change_percentage_24h_in_currency > 0 %}text-success{% else %}text-danger{% endif %}"
+          class="{% if coin.price_change_percentage_7d_in_currency > 0 %}text-success{% else %}text-danger{% endif %}"
         >
           {{ coin.price_change_percentage_7d_in_currency|floatformat:1 }}%
         </td>
