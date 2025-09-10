@@ -28,7 +28,7 @@
           {{ coin.name }} -
           <span class="fw-bold text-primary">{{ coin.symbol }}</span>
         </td>
-        <td>${{ coin.current_price|floatformat:'g' }}</td>
+        <td>{{ coin.current_price|format_amount }}</td>
         <td
           class="{% if coin.price_change_percentage_24h_in_currency > 0 %}text-success{% else %}text-danger{% endif %}"
         >
@@ -39,9 +39,9 @@
         >
           {{ coin.price_change_percentage_7d_in_currency|floatformat:1 }}%
         </td>
-        <td>${{ coin.ath|floatformat:'g' }}</td>
-        <td>${{ coin.total_volume|floatformat:'g' }}</td>
-        <td>${{ coin.market_cap|floatformat:'g' }}</td>
+        <td>{{ coin.ath|format_amount }}</td>
+        <td>{{ coin.total_volume|format_amount }}</td>
+        <td>{{ coin.market_cap|format_amount }}</td>
       </tr>
       {% endfor %}
     </tbody>
