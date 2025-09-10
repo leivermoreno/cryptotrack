@@ -35,6 +35,13 @@ def format_amount(value):
 
     return f'${output}'
 
+@register.filter(is_safe=True)
+def percentage_change_class(value):
+    if value > 0:
+        return 'text-success'
+    else:
+        return 'text-danger'
+
 @register.simple_tag
 def sort_link(key, page, current_sort, current_direction, content):
     direction = "asc"

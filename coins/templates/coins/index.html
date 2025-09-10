@@ -30,12 +30,12 @@
         </td>
         <td>{{ coin.current_price|format_amount }}</td>
         <td
-          class="{% if coin.price_change_percentage_24h_in_currency > 0 %}text-success{% else %}text-danger{% endif %}"
+          class="{{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}"
         >
           {{ coin.price_change_percentage_24h_in_currency|floatformat:1 }}%
         </td>
         <td
-          class="{% if coin.price_change_percentage_7d_in_currency > 0 %}text-success{% else %}text-danger{% endif %}"
+          class="{{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}"
         >
           {{ coin.price_change_percentage_7d_in_currency|floatformat:1 }}%
         </td>
