@@ -42,13 +42,11 @@ def get_coin_list():
         params={"status": "active"},
     )
 
-    return res
+    return res.json()
 
 
 def get_coin_count():
-    return cache.get_or_set(
-        "coin_count", len(get_coin_list().json()), COIN_COUNT_TIMEOUT
-    )
+    return cache.get_or_set("coin_count", len(get_coin_list()), COIN_COUNT_TIMEOUT)
 
 
 def get_page_count():
