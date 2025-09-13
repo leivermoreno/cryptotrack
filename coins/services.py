@@ -1,10 +1,9 @@
 import threading
 import math
-
 from django.conf import settings
 from django.core.cache import cache
 import requests
-
+from coins.models import Coin
 
 CG_API_KEY = settings.COINGECKO_KEY
 CG_URL = settings.COINGECKO_ENDPOINT
@@ -36,13 +35,33 @@ def _get_session():
 
 
 def get_coin_list():
-
     res = _get_session().get(
         CG_URL + "coins/list",
         params={"status": "active"},
     )
 
     return res.json()
+
+
+def get_simple_coin_data(coin_id):
+    try:
+        coin = Coin.objects.get(cg_id=coin_id)
+    except Coin.DoesNotExist:
+        res = _get_session().get(
+            CG_URL + f"coins/{coin_id}",
+        )
+
+        if res.status_code == 404:
+            return None
+
+        coin_data = res.json()
+        coin = Coin.objects.create(
+            cg_id=coin_data["id"],
+            name=coin_data["name"],
+            symbol=coin_data["symbol"],
+        )
+
+    return coin
 
 
 def get_coin_count():
