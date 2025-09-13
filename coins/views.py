@@ -1,6 +1,11 @@
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from coins.services import get_page_count, get_coin_list_with_data, ALLOWED_SORTS
+from coins.services import (
+    get_page_count,
+    get_coin_list_with_data,
+    ALLOWED_SORTS,
+    ALLOWED_DIRECTIONS,
+)
 
 
 def render_index(request):
@@ -19,7 +24,7 @@ def render_index(request):
         redirect_url = first_page_url
     elif page > page_count:
         redirect_url = f"{first_page_url}?page={page_count}"
-    elif sort not in ALLOWED_SORTS or direction not in ["asc", "desc"]:
+    elif sort not in ALLOWED_SORTS or direction not in ALLOWED_DIRECTIONS:
         redirect_url = reverse("coins:index", query={"page": page})
 
     if redirect_url:

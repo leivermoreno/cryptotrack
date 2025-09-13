@@ -21,6 +21,7 @@ ALLOWED_SORTS = {
     "volume": "total_volume",
     "market_cap": "market_cap",
 }
+ALLOWED_DIRECTIONS = ["asc", "desc"]
 
 _thread_local = threading.local()
 
