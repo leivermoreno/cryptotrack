@@ -18,6 +18,7 @@
                 <th>{% sort_link 'ath' page sort direction 'ATH' %}</th>
                 <th>{% sort_link 'volume' page sort direction '24h Volume' %}</th>
                 <th>{% sort_link 'market_cap' page sort direction 'Market Cap' %}</th>
+                <th>Watchlist</th>
             </tr>
             </thead>
 
@@ -43,6 +44,18 @@
                     <td>{{ coin.ath|format_amount }}</td>
                     <td>{{ coin.total_volume|format_amount }}</td>
                     <td>{{ coin.market_cap|format_amount }}</td>
+                    <td>
+                        <form action="{% url 'coins:add_remove_to_watchlist' coin.id %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-link text-decoration-none">
+                                {% if coin.id in user_watchlist %}
+                                    &#10003;
+                                {% else %}
+                                    &#10007;
+                                {% endif %}
+                            </button>
+                        </form>
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>

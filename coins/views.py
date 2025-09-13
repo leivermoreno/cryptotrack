@@ -1,11 +1,15 @@
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from coins.services import (
     get_page_count,
     get_coin_list_with_data,
+    get_simple_coin_data,
     ALLOWED_SORTS,
     ALLOWED_DIRECTIONS,
 )
+from coins.models import Watchlist
 
 
 def render_index(request):
@@ -32,6 +36,11 @@ def render_index(request):
 
     page = min(page, get_page_count())
     coin_list = get_coin_list_with_data(page, sort, direction)
+    user_watchlist = (
+        Watchlist.get_coin_ids_for_user(request.user.id)
+        if request.user.is_authenticated
+        else []
+    )
 
     return render(
         request,
@@ -42,5 +51,20 @@ def render_index(request):
             "coin_list": coin_list,
             "sort": sort,
             "direction": direction,
+            "user_watchlist": user_watchlist,
         },
     )
+
+
+@login_required
+@require_POST
+def add_remove_to_watchlist(request, cg_id):
+    coin = get_simple_coin_data(cg_id)
+    if coin:
+        watchlist, created = Watchlist.objects.get_or_create(
+            user_id=request.user.id, coin_id=coin.id
+        )
+        if not created:
+            watchlist.delete()
+
+    return redirect(reverse("coins:index"))
