@@ -67,4 +67,5 @@ def add_remove_to_watchlist(request, cg_id):
         if not created:
             watchlist.delete()
 
-    return redirect(reverse("coins:index"))
+    next_url = request.POST.get("next", reverse("coins:index"))
+    return redirect(next_url)
