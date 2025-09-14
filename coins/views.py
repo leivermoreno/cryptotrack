@@ -37,7 +37,7 @@ def render_index(request):
     page = min(page, get_page_count())
     coin_list = get_coin_list_with_data(page, sort, direction)
     user_watchlist = (
-        Watchlist.get_coin_ids_for_user(request.user.id)
+        list(Watchlist.get_coin_ids_for_user(request.user.id))
         if request.user.is_authenticated
         else []
     )

@@ -14,10 +14,8 @@ class Watchlist(models.Model):
 
     @staticmethod
     def get_coin_ids_for_user(user_id):
-        return list(
-            Watchlist.objects.filter(user_id=user_id).values_list(
-                "coin__cg_id", flat=True
-            )
+        return Watchlist.objects.filter(user_id=user_id).values_list(
+            "coin__cg_id", flat=True
         )
 
     class Meta:
