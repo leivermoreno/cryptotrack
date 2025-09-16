@@ -1,5 +1,5 @@
 from django.urls import path
-from coins.views import render_index, add_remove_to_watchlist
+from coins.views import render_index, add_remove_to_watchlist, render_watchlist
 
 app_name = "coins"
 urlpatterns = [
@@ -9,4 +9,5 @@ urlpatterns = [
         add_remove_to_watchlist,
         name="add_remove_to_watchlist",
     ),
+    path("watchlist/", render_watchlist, name="watchlist"),
 ]

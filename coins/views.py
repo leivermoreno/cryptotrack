@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect
+from django.core.paginator import Paginator
 from django.urls import reverse
 from coins.services import (
     get_page_count,
@@ -56,3 +57,33 @@ def add_remove_to_watchlist(request, cg_id):
 
     next_url = request.POST.get("next", reverse("coins:index"))
     return redirect(next_url)
+
+
+@login_required
+def render_watchlist(request):
+    watchlist = Watchlist.get_coin_ids_for_user(request.user.id)
+    paginator = Paginator(watchlist, 10)
+
+    params = get_validated_query_params(request, paginator.num_pages)
+    if params["redirect"]:
+        redirect_url = reverse("coins:watchlist") + params["query_string"]
+        return redirect(redirect_url)
+    page = params["page"]
+    sort = params["sort"]
+    direction = params["direction"]
+    page_obj = paginator.page(page)
+    watchlist = page_obj.object_list
+    coins = []
+    if watchlist:
+        coins = get_coin_list_with_data(1, sort, direction, ids=watchlist)
+
+    return render(
+        request,
+        "coins/watchlist.html",
+        context={
+            "coin_list": coins,
+            "sort": sort,
+            "direction": direction,
+            "page_obj": page_obj,
+        },
+    )
