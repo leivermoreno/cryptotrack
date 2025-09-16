@@ -72,25 +72,24 @@ def get_page_count():
     return math.ceil(get_coin_count() / RESULTS_PAGE)
 
 
-def get_coin_list_with_data(page, sort, direction):
-    if cache.has_key(f"coin_list_page_{page}"):
+def get_coin_list_with_data(page, sort, direction, ids=None):
+    # not caching when ids are provided because that would create too many cache entries
+    if not ids and cache.has_key(f"coin_list_page_{page}"):
         data = cache.get(f"coin_list_page_{page}")
     else:
-        data = (
-            _get_session()
-            .get(
-                CG_URL + "coins/markets",
-                params={
-                    "vs_currency": "usd",
-                    "order": "market_cap_desc",
-                    "page": page,
-                    "per_page": 100,
-                    "price_change_percentage": "24h,7d",
-                },
-            )
-            .json()
-        )
-        cache.set(f"coin_list_page_{page}", data, PAGE_DATA_TIMEOUT)
+        params = {
+            "vs_currency": "usd",
+            "order": "market_cap_desc",
+            "page": page,
+            "per_page": 100,
+            "price_change_percentage": "24h,7d",
+        }
+        if ids:
+            params["ids"] = ",".join(ids)
+
+        data = _get_session().get(CG_URL + "coins/markets", params=params).json()
+        if not ids:
+            cache.set(f"coin_list_page_{page}", data, PAGE_DATA_TIMEOUT)
 
     return _sort_coin_list(data, sort, direction)
 
