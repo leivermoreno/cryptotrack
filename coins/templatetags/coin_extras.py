@@ -36,6 +36,17 @@ def format_amount(value):
 
 
 @register.filter(is_safe=True)
+def format_percentage(value):
+    if value is None:
+        return "-"
+    else:
+        val = f"{value:.2f}"
+        if val == "0.00":
+            val = "0"
+        return val + "%"
+
+
+@register.filter(is_safe=True)
 def percentage_change_class(value):
     if value is None:
         return ""
