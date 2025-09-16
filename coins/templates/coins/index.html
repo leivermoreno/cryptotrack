@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% load cache %}
 {% load coin_extras %}
 
 {% block title %}Home{% endblock title %}
@@ -31,15 +30,11 @@
                         <span class="fw-bold text-primary">{{ coin.symbol }}</span>
                     </td>
                     <td>{{ coin.current_price|format_amount }}</td>
-                    <td
-                            class="{{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}"
-                    >
-                        {{ coin.price_change_percentage_24h_in_currency|floatformat:1 }}%
+                    <td class="{{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}">
+                        {{ coin.price_change_percentage_24h_in_currency|format_percentage }}
                     </td>
-                    <td
-                            class="{{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}"
-                    >
-                        {{ coin.price_change_percentage_7d_in_currency|floatformat:1 }}%
+                    <td class="{{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}">
+                        {{ coin.price_change_percentage_7d_in_currency|format_percentage }}
                     </td>
                     <td>{{ coin.ath|format_amount }}</td>
                     <td>{{ coin.total_volume|format_amount }}</td>
