@@ -24,6 +24,9 @@
                 <a class="nav-link" href="{% url 'coins:index' %}">Home</a>
             </li>
             {% if request.user.is_authenticated %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'coins:watchlist' %}">Watchlist</a>
+                </li>
                 <form action="{% url 'logout' %}" method="post">
                     {% csrf_token %}
                     <button class="btn btn-link nav-link" type="submit">Logout</button>
