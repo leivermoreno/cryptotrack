@@ -1,0 +1,73 @@
+{% load coin_extras %}
+
+<table class="table table-hover text-center">
+    <thead class="position-sticky top-0 bg-light">
+    <tr>
+        <th>
+            {% if is_watchlist %}
+                #
+            {% else %}
+                {% sort_link 'rank' page sort direction '#' %}
+            {% endif %}
+        </th>
+        <th class="text-start">{% sort_link 'coin' page sort direction 'Coin' %}</th>
+        <th>{% sort_link 'price' page sort direction 'Price' %}</th>
+        <th>{% sort_link 'price_change_24h' page sort direction '24h' %}</th>
+        <th>{% sort_link 'price_change_7d' page sort direction '7d' %}</th>
+        <th>{% sort_link 'ath' page sort direction 'ATH' %}</th>
+        <th>{% sort_link 'volume' page sort direction '24h Volume' %}</th>
+        <th>{% sort_link 'market_cap' page sort direction 'Market Cap' %}</th>
+        <th>
+            {% if is_watchlist %}
+                Remove
+            {% else %}
+                Watchlist
+            {% endif %}
+        </th>
+    </tr>
+    </thead>
+
+    <tbody>
+    {% for coin in coin_list %}
+        <tr>
+            <th>
+                {% if is_watchlist %}
+                    {{ forloop.counter }}
+                {% else %}
+                    {{ coin.market_cap_rank|default:"-" }}
+                {% endif %}
+            </th>
+            <td class="text-start">
+                {{ coin.name }} -
+                <span class="fw-bold text-primary">{{ coin.symbol }}</span>
+            </td>
+            <td>{{ coin.current_price|format_amount }}</td>
+            <td class="{{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}">
+                {{ coin.price_change_percentage_24h_in_currency|format_percentage }}
+            </td>
+            <td class="{{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}">
+                {{ coin.price_change_percentage_7d_in_currency|format_percentage }}
+            </td>
+            <td>{{ coin.ath|format_amount }}</td>
+            <td>{{ coin.total_volume|format_amount }}</td>
+            <td>{{ coin.market_cap|format_amount }}</td>
+            <td>
+                <form action="{% url 'coins:add_remove_to_watchlist' coin.id %}" method="post">
+                    {% csrf_token %}
+                    {% if is_watchlist %}
+                        <input type="hidden" name="next" value="{% url 'coins:watchlist' %}">
+                    {% endif %}
+                    <button type="submit" class="btn btn-sm btn-link text-decoration-none">
+                        {% if is_watchlist or coin.id not in user_watchlist %}
+                            &#10007;
+                        {% else %}
+                            &#10003;
+                        {% endif %}
+
+                    </button>
+                </form>
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
