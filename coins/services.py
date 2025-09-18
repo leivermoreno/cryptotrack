@@ -34,13 +34,23 @@ def _get_session():
     return _thread_local.session
 
 
-def get_coin_list():
+def get_supported_coin_list():
     res = _get_session().get(
         CG_URL + "coins/list",
         params={"status": "active"},
     )
 
     return res.json()
+
+
+def get_coin_count():
+    return cache.get_or_set(
+        "coin_count", len(get_supported_coin_list()), COIN_COUNT_TIMEOUT
+    )
+
+
+def get_page_count():
+    return math.ceil(get_coin_count() / RESULTS_PAGE)
 
 
 def get_simple_coin_data(coin_id):
@@ -62,14 +72,6 @@ def get_simple_coin_data(coin_id):
         )
 
     return coin
-
-
-def get_coin_count():
-    return cache.get_or_set("coin_count", len(get_coin_list()), COIN_COUNT_TIMEOUT)
-
-
-def get_page_count():
-    return math.ceil(get_coin_count() / RESULTS_PAGE)
 
 
 def get_coin_list_with_data(page, sort, direction, ids=None):
