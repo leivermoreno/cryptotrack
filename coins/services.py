@@ -76,21 +76,28 @@ def get_simple_coin_data(coin_id):
 
 def get_coin_list_with_data(page, sort, direction, ids=None):
     # not caching when ids are provided because that would create too many cache entries
-    if not ids and cache.has_key(f"coin_list_page_{page}"):
+    if ids is not None and len(ids) == 0:
+        return []
+
+    if ids is None and cache.has_key(f"coin_list_page_{page}"):
         data = cache.get(f"coin_list_page_{page}")
     else:
-        params = {
-            "vs_currency": "usd",
-            "order": "market_cap_desc",
-            "page": page,
-            "per_page": 100,
-            "price_change_percentage": "24h,7d",
-        }
-        if ids:
-            params["ids"] = ",".join(ids)
-
-        data = _get_session().get(CG_URL + "coins/markets", params=params).json()
-        if not ids:
+        data = (
+            _get_session()
+            .get(
+                CG_URL + "coins/markets",
+                params={
+                    "vs_currency": "usd",
+                    "order": "market_cap_desc",
+                    "page": page,
+                    "per_page": 100,
+                    "price_change_percentage": "24h,7d",
+                    "ids": ",".join(ids) if ids else "",
+                },
+            )
+            .json()
+        )
+        if ids is None:
             cache.set(f"coin_list_page_{page}", data, PAGE_DATA_TIMEOUT)
 
     return _sort_coin_list(data, sort, direction)
