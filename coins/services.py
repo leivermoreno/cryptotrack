@@ -57,28 +57,29 @@ def get_page_count():
     return math.ceil(get_coin_count() / RESULTS_PAGE)
 
 
-def get_simple_coin_data(coin_id):
-    try:
-        coin = Coin.objects.get(cg_id=coin_id)
-    except Coin.DoesNotExist:
-        res = _get_session().get(
-            CG_URL + f"coins/{coin_id}",
-        )
+# todo remove if not needed
+# def get_simple_coin_data(coin_id):
+#     try:
+#         coin = Coin.objects.get(cg_id=coin_id)
+#     except Coin.DoesNotExist:
+#         res = _get_session().get(
+#             CG_URL + f"coins/{coin_id}",
+#         )
+#
+#         if res.status_code == 404:
+#             return None
+#
+#         coin_data = res.json()
+#         coin = Coin.objects.create(
+#             cg_id=coin_data["id"],
+#             name=coin_data["name"],
+#             symbol=coin_data["symbol"],
+#         )
+#
+#     return coin
 
-        if res.status_code == 404:
-            return None
 
-        coin_data = res.json()
-        coin = Coin.objects.create(
-            cg_id=coin_data["id"],
-            name=coin_data["name"],
-            symbol=coin_data["symbol"],
-        )
-
-    return coin
-
-
-def get_coin_list_with_data(page, sort, direction, ids=None):
+def get_coin_list_with_market(page, sort, direction, ids=None):
     # not caching when ids are provided because that would create too many cache entries
     if ids is not None and len(ids) == 0:
         return []

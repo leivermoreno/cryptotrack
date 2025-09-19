@@ -5,7 +5,7 @@ from django.core.paginator import Paginator
 from django.urls import reverse
 from coins.services import (
     get_page_count,
-    get_coin_list_with_data,
+    get_coin_list_with_market,
 )
 from coins.models import Coin, Watchlist
 from coins.utils import get_validated_query_params
@@ -29,7 +29,7 @@ def render_index(request):
     page = params["page"]
     sort = params["sort"]
     direction = params["direction"]
-    coin_list = get_coin_list_with_data(page, sort, direction)
+    coin_list = get_coin_list_with_market(page, sort, direction)
     user_watchlist = (
         list(Watchlist.get_coin_ids_for_user(request.user.id))
         if request.user.is_authenticated
@@ -89,15 +89,15 @@ def render_watchlist(request):
     direction = params["direction"]
     page_obj = paginator.page(page)
     watchlist = page_obj.object_list
-    coins = []
+    coin_list = []
     if watchlist:
-        coins = get_coin_list_with_data(1, sort, direction, ids=watchlist)
+        coin_list = get_coin_list_with_market(1, sort, direction, ids=watchlist)
 
     return render(
         request,
         "coins/watchlist.html",
         context={
-            "coin_list": coins,
+            "coin_list": coin_list,
             "sort": sort,
             "direction": direction,
             "page_obj": page_obj,
