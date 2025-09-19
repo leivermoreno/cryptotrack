@@ -8,7 +8,7 @@ from coins.models import Coin
 CG_API_KEY = settings.COINGECKO_KEY
 CG_URL = settings.COINGECKO_ENDPOINT
 RESULTS_PAGE = 100
-COIN_COUNT_TIMEOUT = settings.CACHE_TIMEOUT_COIN_COUNT
+SUPPORTED_COINS_TIMEOUT = settings.CACHE_SUPPORTED_COINS_TIMEOUT
 PAGE_DATA_TIMEOUT = settings.CACHE_TIMEOUT_PAGE_DATA
 ALLOWED_SORTS = {
     "rank": "market_cap_rank",
@@ -35,18 +35,22 @@ def _get_session():
 
 
 def get_supported_coin_list():
-    res = _get_session().get(
-        CG_URL + "coins/list",
-        params={"status": "active"},
-    )
+    if cache.has_key("supported_coin_list"):
+        return cache.get("supported_coin_list")
+    else:
+        res = _get_session().get(
+            CG_URL + "coins/list",
+            params={"status": "active"},
+        )
 
-    return res.json()
+        data = res.json()
+        cache.set("supported_coin_list", data, SUPPORTED_COINS_TIMEOUT)
+
+        return res.json()
 
 
 def get_coin_count():
-    return cache.get_or_set(
-        "coin_count", len(get_supported_coin_list()), COIN_COUNT_TIMEOUT
-    )
+    return len(get_supported_coin_list())
 
 
 def get_page_count():
