@@ -25,7 +25,6 @@ def get_validated_query_params(request, page_count):
 
     return {
         "redirect": redirect,
-        "query_string": f"?page={page}&sort={sort}&direction={direction}",
         "page": page,
         "sort": sort,
         "direction": direction,

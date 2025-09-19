@@ -16,7 +16,14 @@ def render_index(request):
     page_count = get_page_count()
     params = get_validated_query_params(request, page_count)
     if params["redirect"]:
-        redirect_url = reverse("coins:index") + params["query_string"]
+        redirect_url = reverse(
+            "coins:index",
+            query={
+                "page": params["page"],
+                "sort": params["sort"],
+                "direction": params["direction"],
+            },
+        )
         return redirect(redirect_url)
 
     page = params["page"]
