@@ -57,6 +57,9 @@
                     {% if is_watchlist %}
                         <input type="hidden" name="next" value="{% url 'coins:watchlist' %}">
                     {% endif %}
+                    <input type="hidden" name="page" value="{{ page }}">
+                    <input type="hidden" name="sort" value="{{ sort }}">
+                    <input type="hidden" name="direction" value="{{ direction }}">
                     <button type="submit" class="btn btn-sm btn-link text-decoration-none">
                         {% if is_watchlist or coin.id not in user_watchlist %}
                             &#10007;

@@ -56,7 +56,15 @@ def add_remove_to_watchlist(request, cg_id):
     except Coin.DoesNotExist:
         pass
 
-    next_url = request.POST.get("next", reverse("coins:index"))
+    page = request.POST.get("page")
+    sort = request.POST.get("sort")
+    direction = request.POST.get("direction")
+    next_url = request.POST.get(
+        "next",
+        reverse(
+            "coins:index", query={"page": page, "sort": sort, "direction": direction}
+        ),
+    )
     return redirect(next_url)
 
 
