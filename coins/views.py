@@ -6,9 +6,8 @@ from django.urls import reverse
 from coins.services import (
     get_page_count,
     get_coin_list_with_data,
-    get_simple_coin_data,
 )
-from coins.models import Watchlist
+from coins.models import Coin, Watchlist
 from coins.utils import get_validated_query_params
 
 
@@ -47,13 +46,15 @@ def render_index(request):
 @login_required
 @require_POST
 def add_remove_to_watchlist(request, cg_id):
-    coin = get_simple_coin_data(cg_id)
-    if coin:
+    try:
+        coin = Coin.objects.get(cg_id=cg_id)
         watchlist, created = Watchlist.objects.get_or_create(
             user_id=request.user.id, coin_id=coin.id
         )
         if not created:
             watchlist.delete()
+    except Coin.DoesNotExist:
+        pass
 
     next_url = request.POST.get("next", reverse("coins:index"))
     return redirect(next_url)
