@@ -79,14 +79,20 @@ def add_remove_to_watchlist(request, cg_id):
 def render_watchlist(request):
     watchlist = Watchlist.get_coin_ids_for_user(request.user.id)
     paginator = Paginator(watchlist, 10)
-
     params = get_validated_query_params(request, paginator.num_pages)
-    if params["redirect"]:
-        redirect_url = reverse("coins:watchlist") + params["query_string"]
-        return redirect(redirect_url)
     page = params["page"]
     sort = params["sort"]
     direction = params["direction"]
+    if params["redirect"]:
+        redirect_url = reverse(
+            "coins:watchlist",
+            query={
+                "page": page,
+                "sort": sort,
+                "direction": direction,
+            },
+        )
+        return redirect(redirect_url)
     page_obj = paginator.page(page)
     watchlist = page_obj.object_list
     coin_list = []
