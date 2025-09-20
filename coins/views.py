@@ -15,20 +15,20 @@ def render_index(request):
     # manual pagination and redirect because data comes from external API
     page_count = get_page_count()
     params = get_validated_query_params(request, page_count)
+    page = params["page"]
+    sort = params["sort"]
+    direction = params["direction"]
     if params["redirect"]:
         redirect_url = reverse(
             "coins:index",
             query={
-                "page": params["page"],
-                "sort": params["sort"],
-                "direction": params["direction"],
+                "page": page,
+                "sort": sort,
+                "direction": direction,
             },
         )
         return redirect(redirect_url)
 
-    page = params["page"]
-    sort = params["sort"]
-    direction = params["direction"]
     coin_list = get_coin_list_with_market(page, sort, direction)
     user_watchlist = (
         list(Watchlist.get_coin_ids_for_user(request.user.id))
