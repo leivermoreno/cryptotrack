@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "accounts.apps.AccountsConfig",
     "crispy_forms",
     "crispy_bootstrap5",
+    "django_apscheduler",
 ]
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
