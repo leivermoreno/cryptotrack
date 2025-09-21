@@ -15,19 +15,13 @@ def render_index(request):
     # manual pagination and redirect because data comes from external API
     page_count = get_page_count()
     params = get_validated_query_params(request, page_count)
+    if params["redirect"]:
+        redirect_url = reverse("coins:index", query=params["query_dict"])
+        return redirect(redirect_url)
+
     page = params["page"]
     sort = params["sort"]
     direction = params["direction"]
-    if params["redirect"]:
-        redirect_url = reverse(
-            "coins:index",
-            query={
-                "page": page,
-                "sort": sort,
-                "direction": direction,
-            },
-        )
-        return redirect(redirect_url)
 
     coin_list = get_coin_list_with_market(page, sort, direction)
     user_watchlist = (
@@ -80,19 +74,13 @@ def render_watchlist(request):
     watchlist = Watchlist.get_coin_ids_for_user(request.user.id)
     paginator = Paginator(watchlist, 10)
     params = get_validated_query_params(request, paginator.num_pages)
+    if params["redirect"]:
+        redirect_url = reverse("coins:watchlist", query=params["query_dict"])
+        return redirect(redirect_url)
+
     page = params["page"]
     sort = params["sort"]
     direction = params["direction"]
-    if params["redirect"]:
-        redirect_url = reverse(
-            "coins:watchlist",
-            query={
-                "page": page,
-                "sort": sort,
-                "direction": direction,
-            },
-        )
-        return redirect(redirect_url)
     page_obj = paginator.page(page)
     watchlist = page_obj.object_list
     coin_list = []
