@@ -6,6 +6,7 @@ def get_validated_query_params(request, page_count):
     sort = request.GET.get("sort", "rank")
     direction = request.GET.get("direction", "asc")
     redirect = False
+    query_dict = None
 
     try:
         page = int(page)
@@ -23,9 +24,17 @@ def get_validated_query_params(request, page_count):
         sort = "rank"
         direction = "asc"
 
+    if redirect:
+        query_dict = {
+            "page": page,
+            "sort": sort,
+            "direction": direction,
+        }
+
     return {
         "redirect": redirect,
         "page": page,
         "sort": sort,
         "direction": direction,
+        "query_dict": query_dict,
     }
