@@ -95,7 +95,7 @@ def get_coin_list_with_market(page, sort, direction, ids=None):
                     "vs_currency": "usd",
                     "order": "market_cap_desc",
                     "page": page,
-                    "per_page": 100,
+                    "per_page": RESULTS_PAGE,
                     "price_change_percentage": "24h,7d",
                     "ids": ",".join(ids) if ids else "",
                 },
