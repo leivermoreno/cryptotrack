@@ -8,22 +8,7 @@
         {% else %}
             <div class="alert alert-info">Your watchlist is empty.</div>
         {% endif %}
-        <div class="pagination py-3 d-flex justify-content-between">
-            <a href="{% url 'coins:index' %}" class="btn btn-secondary">Back to Market</a>
-            <span class="step-link">
-                {% if page_obj.has_previous %}
-                    <a class="text-decoration-none me-3"
-                       href="{% url 'coins:watchlist' %}?page={{ page_obj.previous_page_number }}">previous</a>
-                {% endif %}
-
-            {{ page_obj.number }}
-
-                {% if page_obj.has_next %}
-                    <a class="text-decoration-none ms-3"
-                       href="{% url 'coins:watchlist' %}?page={{ page_obj.next_page_number }}">next</a>
-                {% endif %}
-            </span>
-        </div>
+        {% include "coins/partials/pagination.html" with url='coins:watchlist' %}
     </div>
 {% endblock content %}
 
