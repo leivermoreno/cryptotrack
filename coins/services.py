@@ -3,7 +3,6 @@ import math
 from django.conf import settings
 from django.core.cache import cache
 import requests
-from coins.models import Coin
 
 CG_API_KEY = settings.COINGECKO_KEY
 CG_URL = settings.COINGECKO_ENDPOINT
