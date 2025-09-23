@@ -7,16 +7,16 @@
             {% if is_watchlist %}
                 #
             {% else %}
-                {% sort_link 'rank' page sort direction '#' %}
+                {% sort_link 'rank' page sort direction search_query '#' %}
             {% endif %}
         </th>
-        <th class="text-start">{% sort_link 'coin' page sort direction 'Coin' %}</th>
-        <th>{% sort_link 'price' page sort direction 'Price' %}</th>
-        <th>{% sort_link 'price_change_24h' page sort direction '24h' %}</th>
-        <th>{% sort_link 'price_change_7d' page sort direction '7d' %}</th>
-        <th>{% sort_link 'ath' page sort direction 'ATH' %}</th>
-        <th>{% sort_link 'volume' page sort direction '24h Volume' %}</th>
-        <th>{% sort_link 'market_cap' page sort direction 'Market Cap' %}</th>
+        <th class="text-start">{% sort_link 'coin' page sort direction search_query 'Coin' %}</th>
+        <th>{% sort_link 'price' page sort direction search_query 'Price' %}</th>
+        <th>{% sort_link 'price_change_24h' page sort direction search_query '24h' %}</th>
+        <th>{% sort_link 'price_change_7d' page sort direction search_query '7d' %}</th>
+        <th>{% sort_link 'ath' page sort direction search_query 'ATH' %}</th>
+        <th>{% sort_link 'volume' page sort direction search_query '24h Volume' %}</th>
+        <th>{% sort_link 'market_cap' page sort direction search_query 'Market Cap' %}</th>
         <th>
             {% if is_watchlist %}
                 Remove
@@ -54,7 +54,7 @@
             <td>
                 <form action="{% url 'coins:add_remove_to_watchlist' coin.id %}" method="post">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{% url url %}?page={{ page }}&sort={{ sort }}&direction={{ direction }}">
+                    <input type="hidden" name="next" value="{% url url %}?page={{ page }}&sort={{ sort }}&direction={{ direction }}{% if search_query %}&search={{ search_query }}{% endif %}">
                     <button type="submit" class="btn btn-sm btn-link text-decoration-none">
                         {% if is_watchlist or coin.id not in user_watchlist %}
                             &#10007;

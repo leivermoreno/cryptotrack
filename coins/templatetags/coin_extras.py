@@ -57,7 +57,7 @@ def percentage_change_class(value):
 
 
 @register.simple_tag
-def sort_link(key, page, current_sort, current_direction, content):
+def sort_link(key, page, current_sort, current_direction, search, content):
     direction = "asc"
     arrow = ""
     if current_sort == key:
@@ -67,9 +67,12 @@ def sort_link(key, page, current_sort, current_direction, content):
         else:
             arrow = "&#8595;"
 
-    html_template = (
-        "<a class='text-decoration-none' href='?page={}&sort={}&direction={}'>{} {}</a>"
+    if search:
+        search = f"&search={search}"
+
+    html_template = "<a class='text-decoration-none' href='?page={}&sort={}&direction={}{}'>{} {}</a>"
+    html = format_html(
+        html_template, page, key, direction, search, content, mark_safe(arrow)
     )
-    html = format_html(html_template, page, key, direction, content, mark_safe(arrow))
 
     return html

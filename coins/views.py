@@ -1,12 +1,12 @@
+import math
+
 from django.contrib.auth.decorators import login_required
+from django.db.models import Q
 from django.views.decorators.http import require_POST
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator
 from django.urls import reverse
-from coins.services import (
-    get_page_count,
-    get_coin_list_with_market,
-)
+from coins.services import get_page_count, get_coin_list_with_market, RESULTS_PAGE
 from coins.models import Coin, Watchlist
 from coins.utils import get_validated_query_params
 
@@ -37,6 +37,42 @@ def render_index(request):
             "page": page,
             "page_count": page_count,
             "coin_list": coin_list,
+            "sort": sort,
+            "direction": direction,
+            "user_watchlist": user_watchlist,
+        },
+    )
+
+
+def render_search(request):
+    search_query = request.GET.get("search", "").strip()
+    if not search_query:
+        return redirect(reverse("coins:index"))
+
+    cg_id_list = Coin.objects.filter(
+        Q(name__icontains=search_query) | Q(symbol__icontains=search_query)
+    ).values_list("cg_id", flat=True)
+    page_count = math.ceil(len(cg_id_list) / RESULTS_PAGE)
+    params = get_validated_query_params(request, page_count)
+    if params["redirect"]:
+        query_dict = params["query_dict"]
+        query_dict["search"] = search_query
+        redirect_url = reverse("coins:search", query=query_dict)
+        return redirect(redirect_url)
+
+    page = params["page"]
+    sort = params["sort"]
+    direction = params["direction"]
+    page_obj = Paginator(cg_id_list, RESULTS_PAGE).page(page)
+    coin_list = get_coin_list_with_market(1, sort, direction, ids=page_obj.object_list)
+    user_watchlist = list(Watchlist.get_coin_ids_for_user(request.user.id))
+    return render(
+        request,
+        "coins/search.html",
+        context={
+            "coin_list": coin_list,
+            "search_query": search_query,
+            "page_obj": page_obj,
             "sort": sort,
             "direction": direction,
             "user_watchlist": user_watchlist,

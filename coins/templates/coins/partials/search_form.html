@@ -1,0 +1,6 @@
+<form action="{% url 'coins:search' %}" class="ms-auto flex-grow-0">
+    <div class="input-group">
+        <input type="text" name="search" value="{{ request.GET.search }}" id="search" class="form-control" placeholder="Search for a coin">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+    </div>
+</form>
