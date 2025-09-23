@@ -8,16 +8,19 @@ def get_validated_query_params(request, page_count):
     redirect = False
     query_dict = None
 
-    try:
-        page = int(page)
-        if page < 1:
-            raise ValueError
-        elif page > page_count:
+    if page_count == 0:
+        page_count = 1
+    else:
+        try:
+            page = int(page)
+            if page < 1:
+                raise ValueError
+            elif page > page_count:
+                redirect = True
+                page = page_count
+        except ValueError:
             redirect = True
-            page = page_count
-    except ValueError:
-        redirect = True
-        page = 1
+            page = 1
 
     if sort not in ALLOWED_SORTS or direction not in ALLOWED_DIRECTIONS:
         redirect = True
