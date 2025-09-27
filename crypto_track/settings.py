@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "common.apps.CommonConfig",
     "coins.apps.CoinsConfig",
     "accounts.apps.AccountsConfig",
+    "portfolio.apps.PortfolioConfig",
     "crispy_forms",
     "crispy_bootstrap5",
     "django_apscheduler",

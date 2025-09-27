@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load crispy_forms_filters %}
+{% load common_extras %}
+
+{% block content %}
+    <div class="container flex-grow-1 d-flex flex-column justify-content-center align-items-center">
+        <h1 class="my-3">{% block title %}{% if transaction %}Edit{% else %}Create{% endif %} Transaction{% endblock %}
+            for {{ coin.name }}</h1>
+        <div class="alert alert-info mb-3">
+            <strong>Available balance:</strong> {{ balance|floatformat }}
+        </div>
+        <form method="post" class="mb-5">
+            {% csrf_token %}
+            {{ form|crispy }}
+            <div class="d-flex justify-content-center">
+                <input class="btn btn-primary" type="submit" value="Submit ">
+            </div>
+        </form>
+
+        {% if transactions %}
+            <table class="table table-hover text-center">
+                <thead class="position-sticky top-0 bg-light">
+                <tr>
+                    <th>#</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Price per Coin</th>
+                    <th>Total Value</th>
+                    <th>Date</th>
+                    <th>Edit</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for tx in transactions %}
+                    <tr>
+                        <th>{{ forloop.counter }}</th>
+                        <td class="{% if tx.transaction_type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_transaction_type_display }}</td>
+                        <td>{{ tx.amount|format_number|default:'-' }}</td>
+                        <td>{{ tx.price|format_amount }}</td>
+                        <td>{{ tx.amount|multiply:tx.price|format_amount }}</td>
+                        <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
+                        <td>
+                            <a href="{% url 'portfolio:edit_transaction' coin.id tx.id %}"
+                               class="btn btn-sm btn-secondary">Edit</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <div class="alert alert-info">Your portfolio is empty.</div>
+        {% endif %}
+    </div>
+{% endblock %}
