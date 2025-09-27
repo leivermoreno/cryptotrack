@@ -13,12 +13,11 @@ from coins.services import (
     get_coin_list_with_market,
     RESULTS_PAGE,
     ALLOWED_SORTS,
-    ALLOWED_DIRECTIONS,
 )
 from common.decorators.views import validate_common_params
 from common.utils import get_common_params
 
-validate_common_params = validate_common_params(ALLOWED_SORTS, ALLOWED_DIRECTIONS)
+validate_common_params = validate_common_params(ALLOWED_SORTS)
 get_common_params = get_common_params(default_sort="rank", default_direction="asc")
 
 

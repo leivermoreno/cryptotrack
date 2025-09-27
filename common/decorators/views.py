@@ -3,7 +3,7 @@ from functools import wraps
 from django.shortcuts import redirect
 
 
-def validate_common_params(allowed_sorts, allowed_directions):
+def validate_common_params(allowed_sorts):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -21,7 +21,7 @@ def validate_common_params(allowed_sorts, allowed_directions):
                     invalid = True
 
             if sort or direction:
-                if sort not in allowed_sorts or direction not in allowed_directions:
+                if sort not in allowed_sorts or direction not in ["asc", "desc"]:
                     invalid = True
 
             if invalid:
