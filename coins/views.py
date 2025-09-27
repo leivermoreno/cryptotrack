@@ -8,9 +8,18 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from coins.models import Coin, Watchlist
-from coins.services import get_page_count, get_coin_list_with_market, RESULTS_PAGE
+from coins.services import (
+    get_page_count,
+    get_coin_list_with_market,
+    RESULTS_PAGE,
+    ALLOWED_SORTS,
+    ALLOWED_DIRECTIONS,
+)
 from common.decorators.views import validate_common_params
 from common.utils import get_common_params
+
+validate_common_params = validate_common_params(ALLOWED_SORTS, ALLOWED_DIRECTIONS)
+get_common_params = get_common_params(default_sort="rank", default_direction="asc")
 
 
 @validate_common_params
