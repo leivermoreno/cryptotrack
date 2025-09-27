@@ -24,7 +24,7 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
     if request.method == "POST":
         if form.is_valid():
             if (
-                form.cleaned_data["transaction_type"] == "sell"
+                form.cleaned_data["type"] == "sell"
                 and form.cleaned_data["amount"] > balance
             ):
                 form.add_error("amount", "Insufficient balance to sell this amount.")

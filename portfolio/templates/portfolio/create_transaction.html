@@ -34,7 +34,7 @@
                 {% for tx in transactions %}
                     <tr>
                         <th>{{ forloop.counter }}</th>
-                        <td class="{% if tx.transaction_type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_transaction_type_display }}</td>
+                        <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>
                         <td>{{ tx.amount|format_number|default:'-' }}</td>
                         <td>{{ tx.price|format_amount }}</td>
                         <td>{{ tx.amount|multiply:tx.price|format_amount }}</td>
