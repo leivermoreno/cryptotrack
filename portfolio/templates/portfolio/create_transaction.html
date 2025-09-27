@@ -37,7 +37,7 @@
                         <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>
                         <td>{{ tx.amount|format_number|default:'-' }}</td>
                         <td>{{ tx.price|format_amount }}</td>
-                        <td>{{ tx.amount|multiply:tx.price|format_amount }}</td>
+                        <td>{{ tx.total|format_amount }}</td>
                         <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
                         <td>
                             <a href="{% url 'portfolio:edit_transaction' coin.id tx.id %}"
