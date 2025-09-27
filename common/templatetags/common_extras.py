@@ -30,7 +30,7 @@ def get_decimal_formatted(value, precision, significant_digits):
 
 
 @register.filter(is_safe=True)
-def format_amount(value):
+def format_number(value):
     if value is None:
         return "-"
     elif value == int(value):
@@ -40,7 +40,12 @@ def format_amount(value):
     else:
         output = get_decimal_formatted(value, precision=10, significant_digits=4)
 
-    return f"${output}"
+    return f"{output}"
+
+
+@register.filter(is_safe=True)
+def format_amount(value):
+    return f"${format_number(value)}"
 
 
 @register.filter(is_safe=True)
