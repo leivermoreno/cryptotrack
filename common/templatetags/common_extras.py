@@ -45,7 +45,11 @@ def format_number(value):
 
 @register.filter(is_safe=True)
 def format_amount(value):
-    return f"${format_number(value)}"
+    formatted_value = format_number(value)
+    if formatted_value == "-":
+        return formatted_value
+
+    return f"${formatted_value}"
 
 
 @register.filter(is_safe=True)
