@@ -1,18 +1,29 @@
-from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.shortcuts import render, redirect
 from django.urls import reverse
 
-from .models import PortfolioTransaction
-from .forms import PortfolioTransactionForm
 from coins.models import Coin
+from common.decorators.views import validate_common_params
+from common.utils import get_common_params, add_direction_sign
+from portfolio.forms import PortfolioTransactionForm
+from portfolio.models import PortfolioTransaction
+from portfolio.settings import ALLOWED_SORTS, DEFAULT_SORT, DEFAULT_DIRECTION
 from portfolio.utils import get_coin_balance
+
+validate_common_params = validate_common_params(ALLOWED_SORTS)
+get_common_params = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
 
 
 @login_required()
+@validate_common_params
 def create_portfolio_transaction(request, coin_id, transaction_id=None):
     try:
         coin = Coin.objects.get(id=coin_id)
         transactions = PortfolioTransaction.get_for_user_and_coin(request.user, coin)
+        page, sort, direction = get_common_params(request, page_count=len(transactions))
+        transactions = transactions.order_by(add_direction_sign(sort, direction))
+        page = Paginator(transactions, 10).page(page)
         balance = get_coin_balance(transactions)
         transaction = None
         if transaction_id:
@@ -43,6 +54,8 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
             "coin": coin,
             "balance": balance,
             "transaction": transaction_id,
-            "transactions": transactions,
+            "page": page,
+            "sort": sort,
+            "direction": direction,
         },
     )
