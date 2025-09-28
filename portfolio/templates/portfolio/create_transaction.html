@@ -3,19 +3,21 @@
 {% load common_extras %}
 
 {% block content %}
-    <div class="container flex-grow-1 d-flex flex-column justify-content-center align-items-center">
+    <div class="container">
         <h1 class="my-3">{% block title %}{% if transaction %}Edit{% else %}Create{% endif %} Transaction{% endblock %}
             for {{ coin.name }}</h1>
-        <div class="alert alert-info mb-3">
-            <strong>Available balance:</strong> {{ balance|floatformat }}
-        </div>
-        <form method="post" class="mb-5">
-            {% csrf_token %}
-            {{ form|crispy }}
-            <div class="d-flex justify-content-center">
-                <input class="btn btn-primary" type="submit" value="Submit ">
+        <div class="d-flex flex-column align-items-center">
+            <div class="alert alert-info mb-3">
+                <strong>Available balance:</strong> {{ balance|floatformat }}
             </div>
-        </form>
+            <form method="post" class="mb-5">
+                {% csrf_token %}
+                {{ form|crispy }}
+                <div class="d-flex justify-content-center">
+                    <input class="btn btn-primary" type="submit" value="Submit ">
+                </div>
+            </form>
+        </div>
 
         {% if page.object_list %}
             <table class="table table-hover text-center">
