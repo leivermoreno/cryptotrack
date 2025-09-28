@@ -1,3 +1,9 @@
+def add_direction_sign(sort, direction):
+    if direction == "desc":
+        return f"-{sort}"
+    return sort
+
+
 def get_common_params(default_sort, default_direction):
     def func(request, page_count):
         page_count = page_count or 1
