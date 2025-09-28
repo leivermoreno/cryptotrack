@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect
+from django.contrib import messages
 
 from coins.models import Coin
 from common.decorators.views import validate_common_params
@@ -69,7 +70,18 @@ def delete_portfolio_transaction(request, coin_id, transaction_id):
         transaction = PortfolioTransaction.get_for_user_and_coin(
             request.user, coin
         ).get(id=transaction_id)
-        transaction.delete()
+
+        balance = get_coin_balance(
+            PortfolioTransaction.get_for_user_and_coin(request.user, coin)
+        )
+        if transaction.type == "buy" and balance - transaction.amount < 0:
+            messages.add_message(
+                request,
+                messages.ERROR,
+                "If you delete this sell transaction, your balance will be negative.",
+            )
+        else:
+            transaction.delete()
         next_ = request.POST.get("next")
         if next_:
             return redirect(next_)
