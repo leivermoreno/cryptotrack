@@ -8,6 +8,7 @@
         {% else %}
             <div class="alert alert-info">No coins found matching your search criteria.</div>
         {% endif %}
-        {% include "coins/partials/pagination.html" with url='coins:search' send_search=True %}
+        {% url 'coins:search' as coins_search_url %}
+        {% include "coins/partials/pagination.html" with url=coins_search_url send_search=True %}
     </div>
 {% endblock content %}

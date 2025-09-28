@@ -8,7 +8,8 @@
         {% else %}
             <div class="alert alert-info">Your watchlist is empty.</div>
         {% endif %}
-        {% include "coins/partials/pagination.html" with url='coins:watchlist' %}
+        {% url 'coins:watchlist' as coins_watchlist_url %}
+        {% include "coins/partials/pagination.html" with url=coins_watchlist_url %}
     </div>
 {% endblock content %}
 

@@ -50,5 +50,8 @@
         {% else %}
             <div class="alert alert-info">Your portfolio is empty.</div>
         {% endif %}
+
+        {% url 'portfolio:add_transaction' coin_id=coin.id as portfolio_add_url %}
+        {% include 'coins/partials/pagination.html' with page_obj=page url=portfolio_add_url %}
     </div>
 {% endblock %}
