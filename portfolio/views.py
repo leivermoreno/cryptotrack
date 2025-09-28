@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect
 
@@ -58,3 +59,20 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
             "direction": direction,
         },
     )
+
+
+@login_required()
+@require_POST
+def delete_portfolio_transaction(request, coin_id, transaction_id):
+    try:
+        coin = Coin.objects.get(id=coin_id)
+        transaction = PortfolioTransaction.get_for_user_and_coin(
+            request.user, coin
+        ).get(id=transaction_id)
+        transaction.delete()
+        next_ = request.POST.get("next")
+        if next_:
+            return redirect(next_)
+    except (Coin.DoesNotExist, PortfolioTransaction.DoesNotExist):
+        pass
+    return redirect("portfolio:add_transaction", coin_id=coin_id)

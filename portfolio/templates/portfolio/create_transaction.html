@@ -29,7 +29,7 @@
                     <th>{% sort_link 'price' page.number sort direction search 'Price per coin' %}</th>
                     <th>{% sort_link 'total' page.number sort direction search 'Total value' %}</th>
                     <th>{% sort_link 'created' page.number sort direction search 'Date' %}</th>
-                    <th>Edit</th>
+                    <th>Actions</th>
                 </tr>
                 </thead>
                 <tbody>
@@ -41,9 +41,14 @@
                         <td>{{ tx.price|format_amount }}</td>
                         <td>{{ tx.total|format_amount }}</td>
                         <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
-                        <td>
+                        <td class="d-flex justify-content-evenly">
                             <a href="{% url 'portfolio:edit_transaction' coin.id tx.id %}"
                                class="btn btn-sm btn-secondary">Edit</a>
+                            <form action="{% url 'portfolio:delete_transaction' coin_id=coin.id transaction_id=tx.id %}" method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="{% url 'portfolio:add_transaction' coin_id=coin.id %}">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
                         </td>
                     </tr>
                 {% endfor %}

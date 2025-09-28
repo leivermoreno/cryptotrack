@@ -12,4 +12,9 @@ urlpatterns = [
         views.create_portfolio_transaction,
         name="edit_transaction",
     ),
+    path(
+        "delete/<int:coin_id>/<int:transaction_id>",
+        views.delete_portfolio_transaction,
+        name="delete_transaction",
+    ),
 ]
