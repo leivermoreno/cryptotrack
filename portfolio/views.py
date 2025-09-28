@@ -52,7 +52,7 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
             "form": form,
             "coin": coin,
             "balance": balance,
-            "transaction": transaction_id,
+            "transaction": transaction,
             "page": page,
             "sort": sort,
             "direction": direction,
