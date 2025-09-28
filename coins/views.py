@@ -11,9 +11,8 @@ from coins.models import Coin, Watchlist
 from coins.services import (
     get_page_count,
     get_coin_list_with_market,
-    RESULTS_PAGE,
-    ALLOWED_SORTS,
 )
+from coins.settings import ALLOWED_SORTS, RESULTS_PAGE, WATCHLIST_COINS_PAGE
 from common.decorators.views import validate_common_params
 from common.utils import get_common_params
 
@@ -97,7 +96,7 @@ def add_remove_to_watchlist(request, cg_id):
 @validate_common_params
 def render_watchlist(request):
     watchlist = Watchlist.get_coin_ids_for_user(request.user.id)
-    paginator = Paginator(watchlist, 10)
+    paginator = Paginator(watchlist, WATCHLIST_COINS_PAGE)
     page, sort, direction = get_common_params(request, page_count=paginator.num_pages)
     page_obj = paginator.page(page)
     watchlist = page_obj.object_list

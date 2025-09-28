@@ -3,22 +3,12 @@ import math
 from django.conf import settings
 from django.core.cache import cache
 import requests
+from coins.settings import ALLOWED_SORTS, RESULTS_PAGE
 
 CG_API_KEY = settings.COINGECKO_KEY
 CG_URL = settings.COINGECKO_ENDPOINT
-RESULTS_PAGE = 100
 SUPPORTED_COINS_TIMEOUT = settings.CACHE_SUPPORTED_COINS_TIMEOUT
 PAGE_DATA_TIMEOUT = settings.CACHE_INDEX_TABLE_DATA_TIMEOUT
-ALLOWED_SORTS = {
-    "rank": "market_cap_rank",
-    "coin": "name",
-    "price": "current_price",
-    "price_change_24h": "price_change_percentage_24h_in_currency",
-    "price_change_7d": "price_change_percentage_7d_in_currency",
-    "ath": "ath",
-    "volume": "total_volume",
-    "market_cap": "market_cap",
-}
 
 _thread_local = threading.local()
 
