@@ -1,7 +1,6 @@
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect
-from django.urls import reverse
 
 from coins.models import Coin
 from common.decorators.views import validate_common_params
@@ -29,7 +28,7 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
         if transaction_id:
             transaction = transactions.get(id=transaction_id)
     except (Coin.DoesNotExist, PortfolioTransaction.DoesNotExist):
-        return redirect(reverse("coins:watchlist"))
+        return redirect("coins:watchlist")
 
     form = PortfolioTransactionForm(request.POST or None, instance=transaction)
     if request.method == "POST":

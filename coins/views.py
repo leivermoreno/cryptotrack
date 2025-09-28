@@ -51,7 +51,7 @@ def render_index(request):
 def render_search(request):
     search_query = request.GET.get("search", "").strip()
     if not search_query:
-        return redirect(reverse("coins:index"))
+        return redirect("coins:index")
 
     cg_id_list = Coin.objects.filter(
         Q(name__icontains=search_query) | Q(symbol__icontains=search_query)
