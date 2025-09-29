@@ -1,23 +1,23 @@
 {% load common_extras %}
 
-{% if page.object_list %}
+{% if page_obj.object_list %}
     <table class="table table-hover text-center">
         <thead class="position-sticky top-0 bg-light">
         <tr>
             <th>#</th>
-            <th>{% sort_link 'type' page.number sort direction search 'Type' %}</th>
+            <th>{% sort_link 'type' page_obj.number sort direction search 'Type' %}</th>
             {% if show_coin_name %}
                 <th>Coin</th>
             {% endif %}
-            <th>{% sort_link 'amount' page.number sort direction search 'Amount' %}</th>
-            <th>{% sort_link 'price' page.number sort direction search 'Price per coin' %}</th>
-            <th>{% sort_link 'total' page.number sort direction search 'Total value' %}</th>
-            <th>{% sort_link 'created' page.number sort direction search 'Date' %}</th>
+            <th>{% sort_link 'amount' page_obj.number sort direction search 'Amount' %}</th>
+            <th>{% sort_link 'price' page_obj.number sort direction search 'Price per coin' %}</th>
+            <th>{% sort_link 'total' page_obj.number sort direction search 'Total value' %}</th>
+            <th>{% sort_link 'created' page_obj.number sort direction search 'Date' %}</th>
             <th>Actions</th>
         </tr>
         </thead>
         <tbody>
-        {% for tx in page.object_list %}
+        {% for tx in page_obj.object_list %}
             <tr>
                 <th>{{ forloop.counter }}</th>
                 <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>

@@ -4,7 +4,7 @@
     <div class="container">
         <h1 class="my-5">{% block title %}Your Watchlist{% endblock %}</h1>
         {% if coin_list %}
-            {% include "coins/partials/coins_table.html" with url='coins:watchlist' page=page_obj.number is_watchlist=True %}
+            {% include "coins/partials/coins_table.html" with url='coins:watchlist' page_number=page_obj.number is_watchlist=True %}
         {% else %}
             <div class="alert alert-info">Your watchlist is empty.</div>
         {% endif %}

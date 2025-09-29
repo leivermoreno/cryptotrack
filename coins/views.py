@@ -37,7 +37,7 @@ def render_index(request):
         request,
         "coins/index.html",
         context={
-            "page": page,
+            "page_number": page,
             "page_count": page_count,
             "coin_list": coin_list,
             "sort": sort,
