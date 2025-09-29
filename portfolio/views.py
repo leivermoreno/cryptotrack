@@ -27,7 +27,7 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
         ).annotate(total=F("amount") * F("price"))
         page, sort, direction = get_common_params(request, page_count=len(transactions))
         transactions = transactions.order_by(add_direction_sign(sort, direction))
-        page = Paginator(transactions, 10).page(page)
+        page = Paginator(transactions, TRANSACTIONS_PER_PAGE).page(page)
         balance = get_coin_balance(transactions)
         transaction = None
         if transaction_id:
