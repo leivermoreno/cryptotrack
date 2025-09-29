@@ -7,7 +7,7 @@
             <th>#</th>
             <th>{% sort_link 'type' page_obj.number sort direction search 'Type' %}</th>
             {% if show_coin_name %}
-                <th>Coin</th>
+                <th>{% sort_link 'coin__name' page_obj.number sort direction search 'Coin' %}</th>
             {% endif %}
             <th>{% sort_link 'amount' page_obj.number sort direction search 'Amount' %}</th>
             <th>{% sort_link 'price' page_obj.number sort direction search 'Price per coin' %}</th>
