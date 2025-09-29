@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import login_required
+from django.db.models import F
 from django.views.decorators.http import require_POST
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect
@@ -21,7 +22,9 @@ get_common_params = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
 def create_portfolio_transaction(request, coin_id, transaction_id=None):
     try:
         coin = Coin.objects.get(id=coin_id)
-        transactions = PortfolioTransaction.get_for_user_and_coin(request.user, coin)
+        transactions = PortfolioTransaction.objects.filter(
+            user=request.user, coin=coin
+        ).annotate(total=F("amount") * F("price"))
         page, sort, direction = get_common_params(request, page_count=len(transactions))
         transactions = transactions.order_by(add_direction_sign(sort, direction))
         page = Paginator(transactions, 10).page(page)
@@ -67,9 +70,9 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
 def delete_portfolio_transaction(request, coin_id, transaction_id):
     try:
         coin = Coin.objects.get(id=coin_id)
-        transaction = PortfolioTransaction.get_for_user_and_coin(
-            request.user, coin
-        ).get(id=transaction_id)
+        transaction = PortfolioTransaction.objects.get(
+            pk=transaction_id, user=request.user, coin=coin
+        )
 
         balance = get_coin_balance(
             PortfolioTransaction.get_for_user_and_coin(request.user, coin)

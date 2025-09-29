@@ -11,9 +11,3 @@ class PortfolioTransaction(models.Model):
     amount = models.DecimalField(max_digits=20, decimal_places=8)
     price = models.DecimalField(max_digits=20, decimal_places=8)
     created = models.DateTimeField(auto_now_add=True)
-
-    @staticmethod
-    def get_for_user_and_coin(user, coin):
-        return PortfolioTransaction.objects.filter(user=user, coin=coin).annotate(
-            total=F("amount") * F("price")
-        )
