@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% load crispy_forms_filters %}
-{% load common_extras %}
 
 {% block content %}
     <div class="container">
@@ -19,44 +18,7 @@
             </form>
         </div>
 
-        {% if page.object_list %}
-            <table class="table table-hover text-center">
-                <thead class="position-sticky top-0 bg-light">
-                <tr>
-                    <th>#</th>
-                    <th>{% sort_link 'type' page.number sort direction search 'Type' %}</th>
-                    <th>{% sort_link 'amount' page.number sort direction search 'Amount' %}</th>
-                    <th>{% sort_link 'price' page.number sort direction search 'Price per coin' %}</th>
-                    <th>{% sort_link 'total' page.number sort direction search 'Total value' %}</th>
-                    <th>{% sort_link 'created' page.number sort direction search 'Date' %}</th>
-                    <th>Actions</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for tx in page.object_list %}
-                    <tr>
-                        <th>{{ forloop.counter }}</th>
-                        <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>
-                        <td>{{ tx.amount|format_number|default:'-' }}</td>
-                        <td>{{ tx.price|format_amount }}</td>
-                        <td>{{ tx.total|format_amount }}</td>
-                        <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
-                        <td class="d-flex justify-content-evenly">
-                            <a href="{% url 'portfolio:edit_transaction' coin.id tx.id %}"
-                               class="btn btn-sm btn-secondary">Edit</a>
-                            <form action="{% url 'portfolio:delete_transaction' coin_id=coin.id transaction_id=tx.id %}" method="post">
-                                {% csrf_token %}
-                                <input type="hidden" name="next" value="{% url 'portfolio:add_transaction' coin_id=coin.id %}">
-                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
-                            </form>
-                        </td>
-                    </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <div class="alert alert-info">Your portfolio is empty.</div>
-        {% endif %}
+        {% include 'portfolio/partials/transactions_table.html' %}
 
         {% url 'portfolio:add_transaction' coin_id=coin.id as portfolio_add_url %}
         {% include 'common/partials/pagination.html' with page_obj=page url=portfolio_add_url %}
