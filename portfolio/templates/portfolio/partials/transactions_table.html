@@ -22,19 +22,19 @@
                 <th>{{ forloop.counter }}</th>
                 <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>
                 {% if show_coin_name %}
-                    <td>{{ coin.name }} - <span class="fw-bold text-primary">{{ coin.symbol }}</span></td>
+                    <td>{{ tx.coin.name }} - <span class="fw-bold text-primary">{{ tx.coin.symbol }}</span></td>
                 {% endif %}
                 <td>{{ tx.amount|format_number|default:'-' }}</td>
                 <td>{{ tx.price|format_amount }}</td>
                 <td>{{ tx.total|format_amount }}</td>
                 <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
                 <td class="d-flex justify-content-evenly">
-                    <a href="{% url 'portfolio:edit_transaction' coin.id tx.id %}"
+                    <a href="{% url 'portfolio:edit_transaction' tx.coin.id tx.id %}"
                        class="btn btn-sm btn-secondary">Edit</a>
-                    <form action="{% url 'portfolio:delete_transaction' coin_id=coin.id transaction_id=tx.id %}"
+                    <form action="{% url 'portfolio:delete_transaction' coin_id=tx.coin.id transaction_id=tx.id %}"
                           method="post">
                         {% csrf_token %}
-                        <input type="hidden" name="next" value="{% url 'portfolio:add_transaction' coin_id=coin.id %}">
+                        <input type="hidden" name="next" value="{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}">
                         <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                     </form>
                 </td>
