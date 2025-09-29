@@ -10,7 +10,12 @@ from common.decorators.views import validate_common_params
 from common.utils import get_common_params, add_direction_sign
 from portfolio.forms import PortfolioTransactionForm
 from portfolio.models import PortfolioTransaction
-from portfolio.settings import ALLOWED_SORTS, DEFAULT_SORT, DEFAULT_DIRECTION
+from portfolio.settings import (
+    ALLOWED_SORTS,
+    DEFAULT_SORT,
+    DEFAULT_DIRECTION,
+    TRANSACTIONS_PER_PAGE,
+)
 from portfolio.utils import get_coin_balance
 
 validate_common_params = validate_common_params(ALLOWED_SORTS)
