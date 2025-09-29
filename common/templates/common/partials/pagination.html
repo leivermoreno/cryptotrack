@@ -2,13 +2,13 @@
     <a href="{% url 'coins:index' %}" class="btn btn-secondary">Back to Market</a>
     <span class="step-link">
         {% if page_obj.has_previous %}
-            <a class="text-decoration-none me-3" href="{{ url }}?page={{ page_obj.previous_page_number }}&sort={{ sort }}&direction={{ direction }}{% if send_search %}&search={{ search_query }}{% endif %}">previous</a>
+            <a class="text-decoration-none me-3" href="{{ request.path }}?page={{ page_obj.previous_page_number }}&sort={{ sort }}&direction={{ direction }}{% if send_search %}&search={{ search_query }}{% endif %}">previous</a>
         {% endif %}
 
         {{ page_obj.number }}
 
         {% if page_obj.has_next %}
-            <a class="text-decoration-none ms-3" href="{{ url }}?page={{ page_obj.next_page_number }}&sort={{ sort }}&direction={{ direction }}{% if send_search %}&search={{ search_query }}{% endif %}">next</a>
+            <a class="text-decoration-none ms-3" href="{{ request.path }}?page={{ page_obj.next_page_number }}&sort={{ sort }}&direction={{ direction }}{% if send_search %}&search={{ search_query }}{% endif %}">next</a>
         {% endif %}
     </span>
 </div>

@@ -20,7 +20,6 @@
 
         {% include 'portfolio/partials/transactions_table.html' %}
 
-        {% url 'portfolio:add_transaction' coin_id=coin.id as portfolio_add_url %}
-        {% include 'common/partials/pagination.html' with url=portfolio_add_url %}
+        {% include 'common/partials/pagination.html' %}
     </div>
 {% endblock %}
