@@ -6,7 +6,7 @@
     <div class="container">
         <h1 class="my-5">Cryptocurrency prices by market capitalization</h1>
 
-        {% include "coins/partials/coins_table.html" with url='coins:index' %}
+        {% include "coins/partials/coins_table.html" %}
 
         <div class="pagination py-3 d-flex justify-content-end">
             {% if page_number > 1 %}

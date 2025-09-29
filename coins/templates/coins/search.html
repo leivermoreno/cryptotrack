@@ -4,7 +4,7 @@
     <div class="container">
         <h1 class="my-5">{% block title %}Results for {{ search_query }}{% endblock %}</h1>
         {% if coin_list %}
-            {% include "coins/partials/coins_table.html" with page_number=page_obj.number url='coins:search' %}
+            {% include "coins/partials/coins_table.html" with page_number=page_obj.number %}
         {% else %}
             <div class="alert alert-info">No coins found matching your search criteria.</div>
         {% endif %}

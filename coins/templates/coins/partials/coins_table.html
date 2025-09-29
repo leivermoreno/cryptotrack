@@ -54,7 +54,7 @@
             <td>
                 <form action="{% url 'coins:add_remove_to_watchlist' coin.id %}" method="post">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{% url url %}?page={{ page_number }}&sort={{ sort }}&direction={{ direction }}{% if search_query %}&search={{ search_query }}{% endif %}">
+                    <input type="hidden" name="next" value="{{ request.path }}?page={{ page_number }}&sort={{ sort }}&direction={{ direction }}{% if search_query %}&search={{ search_query }}{% endif %}">
                     <button type="submit" class="btn btn-sm btn-link text-decoration-none">
                         {% if is_watchlist or coin.id not in user_watchlist %}
                             &#10007;
