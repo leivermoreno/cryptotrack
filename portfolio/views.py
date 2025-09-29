@@ -27,9 +27,7 @@ get_common_params = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
 def create_portfolio_transaction(request, coin_id, transaction_id=None):
     try:
         coin = Coin.objects.get(id=coin_id)
-        transactions = PortfolioTransaction.objects.filter(
-            user=request.user, coin=coin
-        ).annotate(total=F("amount") * F("price"))
+        transactions = PortfolioTransaction.get_for_user(request.user).filter(coin=coin)
         page, sort, direction = get_common_params(request, page_count=len(transactions))
         transactions = transactions.order_by(add_direction_sign(sort, direction))
         page = Paginator(transactions, TRANSACTIONS_PER_PAGE).page(page)
