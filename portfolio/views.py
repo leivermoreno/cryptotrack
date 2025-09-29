@@ -75,7 +75,7 @@ def delete_portfolio_transaction(request, coin_id, transaction_id):
         )
 
         balance = get_coin_balance(
-            PortfolioTransaction.get_for_user_and_coin(request.user, coin)
+            PortfolioTransaction.objects.filter(user=request.user, coin=coin)
         )
         if transaction.type == "buy" and balance - transaction.amount < 0:
             messages.add_message(
