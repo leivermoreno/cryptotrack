@@ -22,6 +22,25 @@ validate_common_params = validate_common_params(ALLOWED_SORTS)
 get_common_params = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
 
 
+@login_required
+@validate_common_params
+def show_all_transactions(request):
+    transactions = PortfolioTransaction.get_for_user(request.user)
+    page, sort, direction = get_common_params(request, page_count=len(transactions))
+    transactions = transactions.order_by(add_direction_sign(sort, direction))
+    page_obj = Paginator(transactions, TRANSACTIONS_PER_PAGE).page(page)
+
+    return render(
+        request,
+        "portfolio/all_transactions.html",
+        {
+            "page_obj": page_obj,
+            "sort": sort,
+            "direction": direction,
+        },
+    )
+
+
 @login_required()
 @validate_common_params
 def create_portfolio_transaction(request, coin_id, transaction_id=None):

@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="container">
+        <h1 class="my-5">{% block title %}All transactions{% endblock %}</h1>
+
+        {% include 'portfolio/partials/transactions_table.html' with show_coin_name=True %}
+        {% include 'common/partials/pagination.html' %}
+    </div>
+{% endblock %}

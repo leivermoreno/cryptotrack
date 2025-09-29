@@ -17,4 +17,5 @@ urlpatterns = [
         views.delete_portfolio_transaction,
         name="delete_transaction",
     ),
+    path("all/", views.show_all_transactions, name="all_transactions"),
 ]
