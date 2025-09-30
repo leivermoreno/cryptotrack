@@ -15,7 +15,6 @@ from portfolio.settings import (
     DEFAULT_DIRECTION,
     TRANSACTIONS_PER_PAGE,
 )
-from portfolio.utils import get_coin_balance
 
 validate_common_params = validate_common_params(ALLOWED_SORTS)
 get_common_params = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
@@ -49,7 +48,7 @@ def create_portfolio_transaction(request, coin_id, transaction_id=None):
         page, sort, direction = get_common_params(request, page_count=len(transactions))
         transactions = transactions.order_by(add_direction_sign(sort, direction))
         page = Paginator(transactions, TRANSACTIONS_PER_PAGE).page(page)
-        balance = get_coin_balance(transactions)
+        balance = PortfolioTransaction.get_coin_balance(request.user, coin)
         transaction = None
         if transaction_id:
             transaction = transactions.get(id=transaction_id)
@@ -95,9 +94,7 @@ def delete_portfolio_transaction(request, coin_id, transaction_id):
             pk=transaction_id, user=request.user, coin=coin
         )
 
-        balance = get_coin_balance(
-            PortfolioTransaction.objects.filter(user=request.user, coin=coin)
-        )
+        balance = PortfolioTransaction.get_coin_balance(request.user, coin)
         if transaction.type == "buy" and balance - transaction.amount < 0:
             messages.add_message(
                 request,
