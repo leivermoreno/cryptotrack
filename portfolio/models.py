@@ -1,5 +1,5 @@
 from django.db import models
-from django.db.models import F
+from django.db.models import F, Case, When, Sum
 from django.contrib.auth.models import User
 from coins.models import Coin
 
@@ -21,3 +21,15 @@ class PortfolioTransaction(models.Model):
             )
             .select_related("coin")
         )
+
+    @staticmethod
+    def get_coin_balance(user, coin):
+        balance = PortfolioTransaction.objects.filter(user=user, coin=coin).aggregate(
+            amount_sum=Sum(
+                Case(
+                    When(type="buy", then="amount"),
+                    When(type="sell", then=-F("amount")),
+                )
+            )
+        )["amount_sum"]
+        return balance or 0
