@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.db import models
 from django.db.models import F, Case, When, Sum
 from django.contrib.auth.models import User
@@ -29,7 +31,8 @@ class PortfolioTransaction(models.Model):
                 Case(
                     When(type="buy", then="amount"),
                     When(type="sell", then=-F("amount")),
+                    default=Decimal("0"),
                 )
             )
         )["amount_sum"]
-        return balance or 0
+        return balance
