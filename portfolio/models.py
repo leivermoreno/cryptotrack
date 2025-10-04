@@ -36,3 +36,23 @@ class PortfolioTransaction(models.Model):
             )
         )["amount_sum"]
         return balance
+
+    @staticmethod
+    def get_positive_coin_balance_ids(user):
+        return (
+            PortfolioTransaction.objects.filter(user=user)
+            .values(
+                "coin",
+            )
+            .annotate(
+                balance=Sum(
+                    Case(
+                        When(type="buy", then="amount"),
+                        When(type="sell", then=-F("amount")),
+                        default=Decimal(0),
+                    )
+                )
+            )
+            .filter(balance__gt=0)
+            .values("coin_id", "coin__cg_id")
+        )
