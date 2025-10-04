@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% load common_extras %}
+
+{% block content %}
+    <div class="container">
+        <h1 class="my-5">{% block title %}Portfolio Overview{% endblock %}</h1>
+
+        <div class="summary d-flex">
+            <div class="summary-item">
+                <h3>Invested</h3>
+                <p>{{ total_invested|format_amount }}</p>
+            </div>
+            <div class="summary-item ms-5">
+                <h3>Portfolio value</h3>
+                <p>{{ portfolio_value|format_amount }}</p>
+            </div>
+            <div class="summary-item ms-5">
+                <h3>UPL</h3>
+                <p>
+                    {{ portfolio_upl|format_amount }} <span
+                        class="{{ portfolio_upl_percentage|percentage_change_class }} small">{{ portfolio_upl_percentage|format_percentage }}</span>
+                </p>
+            </div>
+        </div>
+        <a href="{% url 'portfolio:all_transactions' %}" class="btn btn-primary">See all transactions</a>
+
+        <table class="table table-hover my-3 text-center">
+            <thead>
+            <tr>
+                <th class="text-start">Coin</th>
+                <th>Price</th>
+                <th>Avg buy price</th>
+                <th>Amount</th>
+                <th>Value</th>
+                <th>UPL</th>
+                <th>Allocation</th>
+                <th>Actions</th>
+            </tr>
+            </thead>
+
+            <tbody>
+            {% for coin in coin_list %}
+                <tr>
+                    <td class="text-start">{{ coin.coin_name }} - <span class="text-primary">{{ coin.coin_symbol }}</span></td>
+                    <td>{{ coin.current_price|format_amount}}</td>
+                    <td>{{ coin.avg_buy_price|format_amount }}</td>
+                    <td>{{ coin.amount|format_number }}</td>
+                    <td>{{ coin.total_invested|format_amount }}</td>
+                    <td>{{ coin.upl|format_amount }} <span class="small {{ coin.upl_percentage|percentage_change_class }}">{{ coin.upl_percentage|format_percentage }}</span></td>
+                    <td>{{ coin.allocation_percentage|format_percentage }}</td>
+                    <td>
+                        <a href="{% url 'portfolio:add_transaction' coin_id=coin.coin_id %}" class="btn btn-secondary btn-sm">Edit</a>
+                    </td>
+                </tr>
+            {% endfor %}
+
+            </tbody>
+
+        </table>
+    </div>
+{% endblock %}

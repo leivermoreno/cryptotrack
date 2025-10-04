@@ -4,6 +4,7 @@ from . import views
 
 app_name = "portfolio"
 urlpatterns = [
+    path("", views.portfolio_overview, name="overview"),
     path(
         "add/<int:coin_id>", views.create_portfolio_transaction, name="add_transaction"
     ),
