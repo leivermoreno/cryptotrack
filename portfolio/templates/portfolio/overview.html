@@ -50,7 +50,7 @@
                     <td>{{ coin.upl|format_amount }} <span class="small {{ coin.upl_percentage|percentage_change_class }}">{{ coin.upl_percentage|format_percentage }}</span></td>
                     <td>{{ coin.allocation_percentage|format_percentage }}</td>
                     <td>
-                        <a href="{% url 'portfolio:add_transaction' coin_id=coin.coin_id %}" class="btn btn-secondary btn-sm">Edit</a>
+                        <a href="{% url 'portfolio:add_transaction' coin_id=coin.coin_id %}" class="btn btn-sm btn-link text-decoration-none">Edit</a>
                     </td>
                 </tr>
             {% endfor %}

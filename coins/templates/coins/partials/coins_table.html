@@ -52,7 +52,7 @@
                 <form action="{% url 'coins:add_remove_to_watchlist' coin.id %}" method="post">
                     {% csrf_token %}
                     <input type="hidden" name="next" value="{{ request.path }}?page={{ page_number }}&sort={{ sort }}&direction={{ direction }}{% if search_query %}&search={{ search_query }}{% endif %}">
-                        <button type="submit" class="btn btn-sm btn-primary {% if is_watchlist or coin.id in user_watchlist %}btn-danger{% else %}btn-primary{% endif %}">
+                        <button type="submit" class="btn btn-sm btn-link text-decoration-none {% if is_watchlist or coin.id in user_watchlist %}text-secondary{% else %}text-primary{% endif %}">
                         {% if is_watchlist or coin.id in user_watchlist %}
                             Remove
                         {% else %}
@@ -61,7 +61,7 @@
                     </button>
                 </form>
             </td>
-            <td><a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.id %}" class="btn btn-sm btn-primary">Add</a></td>
+            <td><a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.id %}" class="btn btn-sm btn-link text-decoration-none">Add</a></td>
         </tr>
     {% endfor %}
     </tbody>

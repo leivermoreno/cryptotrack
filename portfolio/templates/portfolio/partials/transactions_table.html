@@ -30,13 +30,13 @@
                 <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
                 <td class="d-flex justify-content-evenly">
                     <a href="{% url 'portfolio:edit_transaction' tx.coin.id tx.id %}"
-                       class="btn btn-sm btn-secondary">Edit</a>
+                       class="btn btn-sm btn-link text-decoration-none">Edit</a>
                     <form action="{% url 'portfolio:delete_transaction' coin_id=tx.coin.id transaction_id=tx.id %}"
                           method="post">
                         {% csrf_token %}
                         <input type="hidden" name="next"
                                value="{% if transaction %}{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}{% else %}{{ request.path }}{% endif %}">
-                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none">Delete</button>
                     </form>
                 </td>
             </tr>
