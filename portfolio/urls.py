@@ -8,6 +8,7 @@ urlpatterns = [
     path(
         "add/<int:coin_id>", views.create_portfolio_transaction, name="add_transaction"
     ),
+    path("add/<cg_id>/", views.create_portfolio_transaction, name="add_transaction_cg"),
     path(
         "edit/<int:coin_id>/<int:transaction_id>",
         views.create_portfolio_transaction,

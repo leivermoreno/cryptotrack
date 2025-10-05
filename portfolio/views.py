@@ -71,9 +71,15 @@ def show_all_transactions(request):
 
 @login_required()
 @validate_common_params
-def create_portfolio_transaction(request, coin_id, transaction_id=None):
+def create_portfolio_transaction(
+    request, coin_id=None, cg_id=None, transaction_id=None
+):
     try:
-        coin = Coin.objects.get(id=coin_id)
+        coin = Coin.objects
+        if coin_id:
+            coin = coin.get(id=coin_id)
+        else:
+            coin = coin.get(cg_id=cg_id)
         transactions = PortfolioTransaction.get_for_user(request.user).filter(coin=coin)
         page, sort, direction = get_common_params(request, page_count=len(transactions))
         transactions = transactions.order_by(add_direction_sign(sort, direction))
