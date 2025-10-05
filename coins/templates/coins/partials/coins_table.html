@@ -19,11 +19,7 @@
         <th>{% sort_link 'market_cap' page_number sort direction search_query 'Market Cap' %}</th>
         <th>Watchlist</th>
         <th>
-            {% if is_watchlist %}
-                Remove
-            {% else %}
-                Watchlist
-            {% endif %}
+            Portfolio
         </th>
     </tr>
     </thead>
@@ -62,10 +58,10 @@
                         {% else %}
                             Add
                         {% endif %}
-
                     </button>
                 </form>
             </td>
+            <td><a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.id %}" class="btn btn-sm btn-primary">Add</a></td>
         </tr>
     {% endfor %}
     </tbody>
