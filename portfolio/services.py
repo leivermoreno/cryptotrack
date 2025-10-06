@@ -22,13 +22,13 @@ def get_portfolio_overview_data(user, cg_to_db_id_map):
 
         coin_list.append(
             {
-                "coin_id": cg_to_db_id_map[coin["id"]],
-                "coin_name": coin["name"],
-                "coin_symbol": coin["symbol"],
-                "current_price": current_price,
+                "id": cg_to_db_id_map[coin["id"]],
+                "name": coin["name"],
+                "symbol": coin["symbol"],
+                "price": current_price,
                 "avg_buy_price": avg_buy_price,
                 "amount": amount,
-                "total_invested": total_invested,
+                "value": total_invested,
                 "upl": upl,
                 "upl_percentage": upl_percentage,
             }
@@ -38,10 +38,7 @@ def get_portfolio_overview_data(user, cg_to_db_id_map):
 
     for coin in coin_list:
         coin["allocation_percentage"] = (
-            coin["amount"]
-            * coin["current_price"]
-            / portfolio_metrics["portfolio_value"]
-            * 100
+            coin["amount"] * coin["price"] / portfolio_metrics["portfolio_value"] * 100
         )
 
     return {"coin_list": coin_list, "portfolio_metrics": portfolio_metrics}
@@ -80,8 +77,8 @@ def build_holdings(user, coin_ids):
 
 
 def calculate_portfolio_metrics(coin_list):
-    total_invested = sum([c["total_invested"] for c in coin_list])
-    portfolio_value = sum([c["amount"] * c["current_price"] for c in coin_list])
+    total_invested = sum([c["value"] for c in coin_list])
+    portfolio_value = sum([c["amount"] * c["price"] for c in coin_list])
     portfolio_upl = sum([c["upl"] for c in coin_list])
     portfolio_upl_percentage = (
         portfolio_upl / total_invested * 100 if total_invested > 0 else 0

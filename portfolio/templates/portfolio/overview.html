@@ -42,15 +42,15 @@
             <tbody>
             {% for coin in coin_list %}
                 <tr>
-                    <td class="text-start">{{ coin.coin_name }} - <span class="text-primary">{{ coin.coin_symbol }}</span></td>
-                    <td>{{ coin.current_price|format_amount}}</td>
+                    <td class="text-start">{{ coin.name }} - <span class="text-primary">{{ coin.symbol }}</span></td>
+                    <td>{{ coin.price|format_amount}}</td>
                     <td>{{ coin.avg_buy_price|format_amount }}</td>
                     <td>{{ coin.amount|format_number }}</td>
-                    <td>{{ coin.total_invested|format_amount }}</td>
+                    <td>{{ coin.value|format_amount }}</td>
                     <td>{{ coin.upl|format_amount }} <span class="small {{ coin.upl_percentage|percentage_change_class }}">{{ coin.upl_percentage|format_percentage }}</span></td>
                     <td>{{ coin.allocation_percentage|format_percentage }}</td>
                     <td>
-                        <a href="{% url 'portfolio:add_transaction' coin_id=coin.coin_id %}" class="btn btn-sm btn-link text-decoration-none">Edit</a>
+                        <a href="{% url 'portfolio:add_transaction' coin_id=coin.id %}" class="btn btn-sm btn-link text-decoration-none">Edit</a>
                     </td>
                 </tr>
             {% endfor %}
