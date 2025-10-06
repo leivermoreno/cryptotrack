@@ -104,7 +104,10 @@ def create_portfolio_transaction(
                 transaction.user = request.user
                 transaction.coin = coin
                 transaction.save()
-                return redirect("portfolio:add_transaction", coin_id=coin_id)
+                if coin_id:
+                    return redirect("portfolio:add_transaction", coin_id=coin_id)
+                else:
+                    return redirect("portfolio:add_transaction_cg", cg_id=cg_id)
 
     return render(
         request,
