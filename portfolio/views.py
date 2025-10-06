@@ -17,8 +17,8 @@ from portfolio.settings import (
     TRANSACTIONS_PER_PAGE,
 )
 
-validate_common_params = validate_common_params(ALLOWED_SORTS)
-get_common_params = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
+validate_common_params_defaults = validate_common_params(ALLOWED_SORTS)
+get_common_params_defaults = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
 
 
 @login_required
@@ -51,10 +51,12 @@ def portfolio_overview(request):
 
 
 @login_required
-@validate_common_params
+@validate_common_params_defaults
 def show_all_transactions(request):
     transactions = PortfolioTransaction.get_for_user(request.user)
-    page, sort, direction = get_common_params(request, page_count=len(transactions))
+    page, sort, direction = get_common_params_defaults(
+        request, page_count=len(transactions)
+    )
     transactions = transactions.order_by(add_direction_sign(sort, direction))
     page_obj = Paginator(transactions, TRANSACTIONS_PER_PAGE).page(page)
 
@@ -70,7 +72,7 @@ def show_all_transactions(request):
 
 
 @login_required()
-@validate_common_params
+@validate_common_params_defaults
 def create_portfolio_transaction(
     request, coin_id=None, cg_id=None, transaction_id=None
 ):
@@ -81,7 +83,9 @@ def create_portfolio_transaction(
         else:
             coin = coin.get(cg_id=cg_id)
         transactions = PortfolioTransaction.get_for_user(request.user).filter(coin=coin)
-        page, sort, direction = get_common_params(request, page_count=len(transactions))
+        page, sort, direction = get_common_params_defaults(
+            request, page_count=len(transactions)
+        )
         transactions = transactions.order_by(add_direction_sign(sort, direction))
         page = Paginator(transactions, TRANSACTIONS_PER_PAGE).page(page)
         balance = PortfolioTransaction.get_coin_balance(request.user, coin)
