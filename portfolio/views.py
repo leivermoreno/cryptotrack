@@ -75,7 +75,7 @@ def create_portfolio_transaction(
     request, coin_id=None, cg_id=None, transaction_id=None
 ):
     try:
-        coin = Coin.objects
+        coin = Coin.objects.filter(is_active=True)
         if coin_id:
             coin = coin.get(id=coin_id)
         else:
@@ -125,7 +125,7 @@ def create_portfolio_transaction(
 @require_POST
 def delete_portfolio_transaction(request, coin_id, transaction_id):
     try:
-        coin = Coin.objects.get(id=coin_id)
+        coin = Coin.objects.get(id=coin_id, is_active=True)
         transaction = PortfolioTransaction.objects.get(
             pk=transaction_id, user=request.user, coin=coin
         )

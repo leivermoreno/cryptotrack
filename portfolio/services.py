@@ -50,7 +50,9 @@ def get_portfolio_overview_data(user, cg_to_db_id_map):
 def build_holdings(user, coin_ids):
     # query only transactions for provided coin_ids
     transactions = (
-        PortfolioTransaction.objects.filter(user=user, coin_id__in=coin_ids)
+        PortfolioTransaction.objects.filter(
+            user=user, coin_id__in=coin_ids, coin__is_active=True
+        )
         .order_by("created")
         .select_related("coin")
     )

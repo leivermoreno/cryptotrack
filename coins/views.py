@@ -54,7 +54,8 @@ def render_search(request):
         return redirect("coins:index")
 
     cg_id_list = Coin.objects.filter(
-        Q(name__icontains=search_query) | Q(symbol__icontains=search_query)
+        Q(name__icontains=search_query) | Q(symbol__icontains=search_query),
+        is_active=True,
     ).values_list("cg_id", flat=True)
     page_count = math.ceil(len(cg_id_list) / RESULTS_PAGE)
     page, sort, direction = get_common_params(request, page_count=page_count)
@@ -79,7 +80,7 @@ def render_search(request):
 @require_POST
 def add_remove_to_watchlist(request, cg_id):
     try:
-        coin = Coin.objects.get(cg_id=cg_id)
+        coin = Coin.objects.get(cg_id=cg_id, is_active=True)
         watchlist, created = Watchlist.objects.get_or_create(
             user_id=request.user.id, coin_id=coin.id
         )

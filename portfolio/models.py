@@ -17,7 +17,7 @@ class PortfolioTransaction(models.Model):
     @staticmethod
     def get_for_user(user):
         return (
-            PortfolioTransaction.objects.filter(user=user)
+            PortfolioTransaction.objects.filter(user=user, coin__is_active=True)
             .annotate(
                 total=F("amount") * F("price"),
             )
@@ -26,7 +26,9 @@ class PortfolioTransaction(models.Model):
 
     @staticmethod
     def get_coin_balance(user, coin):
-        balance = PortfolioTransaction.objects.filter(user=user, coin=coin).aggregate(
+        balance = PortfolioTransaction.objects.filter(
+            user=user, coin=coin, coin__is_active=True
+        ).aggregate(
             amount_sum=Sum(
                 Case(
                     When(type="buy", then="amount"),
@@ -34,13 +36,15 @@ class PortfolioTransaction(models.Model):
                     default=Decimal("0"),
                 )
             )
-        )["amount_sum"]
+        )[
+            "amount_sum"
+        ]
         return balance
 
     @staticmethod
     def get_positive_coin_balance_ids(user):
         return (
-            PortfolioTransaction.objects.filter(user=user)
+            PortfolioTransaction.objects.filter(user=user, coin__is_active=True)
             .values(
                 "coin",
             )
