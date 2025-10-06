@@ -6,6 +6,7 @@ class Coin(models.Model):
     cg_id = models.CharField(max_length=100, unique=True)
     name = models.CharField(max_length=200)
     symbol = models.CharField(max_length=50)
+    is_active = models.BooleanField(default=True)
 
 
 class Watchlist(models.Model):
