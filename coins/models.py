@@ -8,6 +8,9 @@ class Coin(models.Model):
     symbol = models.CharField(max_length=50)
     is_active = models.BooleanField(default=True)
 
+    def __str__(self):
+        return self.name
+
 
 class Watchlist(models.Model):
     coin = models.ForeignKey(Coin, on_delete=models.CASCADE)
