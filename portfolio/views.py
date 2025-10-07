@@ -15,6 +15,7 @@ from portfolio.settings import (
     DEFAULT_SORT,
     DEFAULT_DIRECTION,
     TRANSACTIONS_PER_PAGE,
+    OVERVIEW_ALLOWED_SORTS,
 )
 
 validate_common_params_defaults = validate_common_params(ALLOWED_SORTS)
@@ -22,7 +23,7 @@ get_common_params_defaults = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
 
 
 @login_required
-@validate_common_params
+@validate_common_params(OVERVIEW_ALLOWED_SORTS)
 def portfolio_overview(request):
     positive_balance_coin_ids = PortfolioTransaction.get_positive_coin_balance_ids(
         user=request.user
@@ -36,11 +37,16 @@ def portfolio_overview(request):
     )
     coin_list = portfolio_overview_data["coin_list"]
     portfolio_metrics = portfolio_overview_data["portfolio_metrics"]
+    sort = request.GET.get("sort", "allocation_percentage")
+    direction = request.GET.get("direction", "desc")
+    coin_list.sort(key=lambda x: x[sort], reverse=(direction == "desc"))
 
     return render(
         request,
         "portfolio/overview.html",
         {
+            "sort": sort,
+            "direction": direction,
             "coin_list": coin_list,
             "total_invested": portfolio_metrics["total_invested"],
             "portfolio_value": portfolio_metrics["portfolio_value"],

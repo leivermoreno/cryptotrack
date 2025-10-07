@@ -28,13 +28,13 @@
         <table class="table table-hover my-3 text-center">
             <thead class="position-sticky top-0 bg-light">
             <tr>
-                <th class="text-start">Coin</th>
-                <th>Price</th>
-                <th>Avg buy price</th>
-                <th>Amount</th>
-                <th>Value</th>
-                <th>UPL</th>
-                <th>Allocation</th>
+                <th class="text-start">{% sort_link 'name' 1 sort direction search 'Coin' %}</th>
+                <th>{% sort_link 'price' 1 sort direction search 'Price' %}</th>
+                <th>{% sort_link 'avg_buy_price' 1 sort direction search 'Avg buy price' %}</th>
+                <th>{% sort_link 'amount' 1 sort direction search 'Amount' %}</th>
+                <th>{% sort_link 'value' 1 sort direction search 'Value' %}</th>
+                <th>{% sort_link 'upl' 1 sort direction search 'UPL' %}</th>
+                <th>{% sort_link 'allocation_percentage' 1 sort direction search 'Allocation' %}</th>
                 <th>Actions</th>
             </tr>
             </thead>
