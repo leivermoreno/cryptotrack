@@ -25,6 +25,7 @@
         </div>
         <a href="{% url 'portfolio:all_transactions' %}" class="btn btn-primary">See all transactions</a>
 
+        {% if coin_list %}
         <table class="table table-hover my-3 text-center">
             <thead class="position-sticky top-0 bg-light">
             <tr>
@@ -56,7 +57,11 @@
             {% endfor %}
 
             </tbody>
-
         </table>
+        {% else %}
+        	<div class="alert alert-info my-3">
+                No coins in your portfolio yet.
+            </div>
+        {% endif %}
     </div>
 {% endblock %}
