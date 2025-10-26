@@ -20,7 +20,7 @@ powered by the CoinGecko API.
 ## Tech Stack
 
 - Django
-- SQLite
+- PostgreSQL
 - Bootstrap 5
 - CoinGecko API
 - APScheduler for background jobs
@@ -34,6 +34,17 @@ powered by the CoinGecko API.
    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
    pip install -r requirements.txt
    ```
+
+2. Create postgresql role and database:
+
+   - Create crypto_track role
+
+   - Create crypto_track database owned by crypto_track role
+
+   - Grant connect privilege on postgres database to crypto_track role in order to execute tests
+
+The configuration expects a local connection type with trust authentication for simplicity. Adjust your `pg_hba.conf`
+file as needed.
 
 2. Apply migrations:
 
@@ -55,7 +66,7 @@ powered by the CoinGecko API.
 
 5. Set environment variables:
 
-    - `COINGECKO_KEY`: API key for CoinGecko
+   - `COINGECKO_KEY`: API key for CoinGecko
 
    The project supports `.env` files. You can create a `.env` file in the root directory and add the variables.
 
@@ -64,6 +75,7 @@ powered by the CoinGecko API.
    ```bash
    python manage.py runapscheduler --run-now
    ```
+
    You must run this at least once before starting the server. This custom command starts an APScheduler instance that
    fetches the listed coins from CoinGecko every two hours to keep the database updated. The `--run-now` flag triggers
    the job immediately.
