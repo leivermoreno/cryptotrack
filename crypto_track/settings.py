@@ -153,4 +153,4 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 COINGECKO_ENDPOINT = "https://api.coingecko.com/api/v3/"
-COINGECKO_KEY = os.environ["COINGECKO_KEY"]
+COINGECKO_KEY = os.environ["CRYPTO_COINGECKO_KEY"]
