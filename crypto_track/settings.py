@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 from pathlib import Path
 
+import dj_database_url
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -88,11 +90,11 @@ WSGI_APPLICATION = "crypto_track.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "crypto_track",
-        "USER": "crypto_track",
-    }
+    "default": dj_database_url.config(
+        default=os.getenv(
+            "CRYPTO_DATABASE_URI", "postgres://crypto_track@/crypto_track"
+        ),
+    )
 }
 
 CACHES = {

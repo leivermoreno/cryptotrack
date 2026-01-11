@@ -43,34 +43,32 @@ powered by the CoinGecko API.
 
    - Grant connect privilege on postgres database to crypto_track role in order to execute tests
 
-The configuration expects a local connection type with trust authentication for simplicity. Adjust your `pg_hba.conf`
-file as needed.
-
-2. Apply migrations:
+3. Apply migrations:
 
    ```bash
    python manage.py migrate
    ```
 
-3. Initialize the cache database:
+4. Initialize the cache database:
 
    ```bash
    python manage.py createcachetable
    ```
 
-4. To access the admin panel, create a superuser:
+5. To access the admin panel, create a superuser:
 
    ```bash
    python manage.py createsuperuser
    ```
 
-5. Set environment variables:
+6. Set environment variables:
 
-   - `COINGECKO_KEY`: API key for CoinGecko
+   - `CRYPTO_COINGECKO_KEY`: API key for CoinGecko
+   - `CRYPTO_DATABASE_URI` (optional): Database URL (e.g., `postgres://user:password@host:5432/dbname`). Defaults to `postgres://crypto_track@/crypto_track`.
 
    The project supports `.env` files. You can create a `.env` file in the root directory and add the variables.
 
-6. Before starting the server, fetch the coins from the CoinGecko API and populate the database:
+7. Before starting the server, fetch the coins from the CoinGecko API and populate the database:
 
    ```bash
    python manage.py runapscheduler --run-now
@@ -79,8 +77,6 @@ file as needed.
    You must run this at least once before starting the server. This custom command starts an APScheduler instance that
    fetches the listed coins from CoinGecko every two hours to keep the database updated. The `--run-now` flag triggers
    the job immediately.
-
-The project uses SQLite as the default database, so no additional setup is required.
 
 ## Running the Server
 
