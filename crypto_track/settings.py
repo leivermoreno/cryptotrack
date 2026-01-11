@@ -32,6 +32,7 @@ SECRET_KEY = (
 DEBUG = os.environ.get("PYTHON_ENV") != "production"
 
 ALLOWED_HOSTS = ["*"]
+CSRF_TRUSTED_ORIGINS = [] if DEBUG else os.environ["CSRF_TRUSTED_ORIGINS"].split(",")
 
 
 # Application definition
