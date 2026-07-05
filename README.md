@@ -63,8 +63,10 @@ powered by the CoinGecko API.
 
 6. Set environment variables:
 
-   - `CRYPTO_COINGECKO_KEY`: API key for CoinGecko
-   - `CRYPTO_DATABASE_URI` (optional): Database URL (e.g., `postgres://user:password@host:5432/dbname`). Defaults to `postgres://crypto_track@/crypto_track`.
+   - `SECRET_KEY`: Django secret key
+   - `CSRF_TRUSTED_ORIGINS`: comma-separated list of trusted origins (e.g., `https://example.com`)
+   - `COINGECKO_KEY`: API key for CoinGecko
+   - `DATABASE_URI` (optional): Database URL (e.g., `postgres://user:password@host:5432/dbname`). Defaults to `postgres://crypto_track@/crypto_track`.
 
    The project supports `.env` files. You can create a `.env` file in the root directory and add the variables.
 

@@ -16,8 +16,8 @@ def check_coingecko_key(app_configs, **kwargs):
     if not settings.COINGECKO_KEY:
         return [
             Warning(
-                "CRYPTO_COINGECKO_KEY is not set; CoinGecko requests will fail.",
-                hint="Set CRYPTO_COINGECKO_KEY in your .env or environment. "
+                "COINGECKO_KEY is not set; CoinGecko requests will fail.",
+                hint="Set COINGECKO_KEY in your .env or environment. "
                 "Market data, search, watchlist, portfolio overview, and the "
                 "catalog sync all require it.",
                 id="coins.W001",

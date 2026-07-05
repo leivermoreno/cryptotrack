@@ -4,7 +4,7 @@ This file provides guidance to AI agents when working with code in this reposito
 
 ## Commands
 
-All commands assume the virtualenv is active (`source venv/bin/activate`) and require env vars set (see Environment below — settings will not even import without `CRYPTO_COINGECKO_KEY`).
+All commands assume the virtualenv is active (`source venv/bin/activate`) and require env vars set (see Environment below — settings will not import without `SECRET_KEY` and `CSRF_TRUSTED_ORIGINS`).
 
 ```bash
 python manage.py migrate              # apply DB migrations
@@ -25,11 +25,11 @@ Tests need the DB user to have CONNECT privilege on the `postgres` database (Dja
 
 Loaded from a `.env` file in the project root (via python-dotenv) or the process environment. See `.env.example`.
 
-- `CRYPTO_COINGECKO_KEY` — **required to import settings at all** (`settings.py` reads it at module load, unguarded). Even `manage.py check` fails without it.
-- `CRYPTO_DATABASE_URI` — optional, parsed by `dj_database_url`. Defaults to `postgres://crypto_track@/crypto_track`.
+- `SECRET_KEY` — **required** (`settings.py` reads it at module load, no fallback). `manage.py check` fails without it.
+- `CSRF_TRUSTED_ORIGINS` — **required** (comma-separated list of origins), read at module load.
+- `COINGECKO_KEY` — optional at import (defaults to `""`), but required at runtime for any CoinGecko request. A system check (`coins.W001`) warns when it is unset.
+- `DATABASE_URI` — optional, parsed by `dj_database_url`. Defaults to `postgres://crypto_track@/crypto_track`.
 - `PYTHON_ENV` — `DEBUG` is on unless this equals `production`.
-- `CSRF_TRUSTED_ORIGINS` — **required in production** (comma-separated); read unguarded when `DEBUG` is false.
-- `DJANGO_SECRET` — falls back to an insecure hardcoded key in dev.
 
 ## Architecture
 

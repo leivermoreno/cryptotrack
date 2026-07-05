@@ -24,18 +24,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env(
-    "DJANGO_SECRET",
-    default="django-insecure-bxk&3ac&tm@i-xu3llpbbi*2&110a=4$ge*2%b54=!v%3)uo7d",
-)
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env("PYTHON_ENV", default="") != "production"
 
 ALLOWED_HOSTS = ["*"]
-# Required in production; a raw missing value now fails with a clear
-# ImproperlyConfigured rather than a KeyError.
-CSRF_TRUSTED_ORIGINS = [] if DEBUG else env_list("CSRF_TRUSTED_ORIGINS")
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
 
 # Application definition
@@ -96,7 +91,7 @@ WSGI_APPLICATION = "crypto_track.wsgi.application"
 DATABASES = {
     "default": dj_database_url.config(
         default=env(
-            "CRYPTO_DATABASE_URI", default="postgres://crypto_track@/crypto_track"
+            "DATABASE_URI", default="postgres://crypto_track@/crypto_track"
         ),
     )
 }
@@ -160,4 +155,4 @@ COINGECKO_ENDPOINT = "https://api.coingecko.com/api/v3/"
 # Read lazily so that settings import (and `manage.py check`, migrations, etc.)
 # does not fail when the key is absent. It is only required at runtime for
 # actual CoinGecko requests (see coins/services.py).
-COINGECKO_KEY = env("CRYPTO_COINGECKO_KEY", default="")
+COINGECKO_KEY = env("COINGECKO_KEY", default="")
