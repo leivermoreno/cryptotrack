@@ -32,8 +32,12 @@ powered by the CoinGecko API.
    ```bash
    python -m venv venv
    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt
    ```
+
+   `requirements-dev.txt` installs the runtime dependencies (via `-r requirements.txt`)
+   plus the development tooling (Ruff, pre-commit). A production/PaaS deploy installs
+   **only** `requirements.txt` and must never install the dev file.
 
 2. Create postgresql role and database:
 
@@ -63,12 +67,23 @@ powered by the CoinGecko API.
 
 6. Set environment variables:
 
-   - `SECRET_KEY`: Django secret key
-   - `CSRF_TRUSTED_ORIGINS`: comma-separated list of trusted origins (e.g., `https://example.com`)
+   - `DJANGO_DEBUG`: boolean development toggle (e.g. `true`/`false`). Unset or false runs the app in the production posture (`DEBUG` off), which makes `SECRET_KEY`, `ALLOWED_HOSTS`, and `CSRF_TRUSTED_ORIGINS` required. Set `true` for local development, tests, and CI. Fail-closed: a value that is not a recognized boolean raises a configuration error rather than silently enabling debug.
+   - `SECRET_KEY`: Django secret key. Required in production; optional in development, where an insecure built-in fallback is used if unset.
+   - `CSRF_TRUSTED_ORIGINS`: comma-separated list of trusted origins, each including a scheme (e.g., `https://example.com`). Required in production; defaults to `http://localhost:8000,http://127.0.0.1:8000` in development.
+   - `ALLOWED_HOSTS`: comma-separated hostnames the app serves (e.g., `example.com,www.example.com`). Required in production; defaults to `localhost,127.0.0.1` in development.
    - `COINGECKO_KEY`: API key for CoinGecko
    - `DATABASE_URI` (optional): Database URL (e.g., `postgres://user:password@host:5432/dbname`). Defaults to `postgres://crypto_track@/crypto_track`.
 
    The project supports `.env` files. You can create a `.env` file in the root directory and add the variables.
+
+   **Production security (optional).** These take effect only when `DEBUG` is off (`DJANGO_DEBUG` unset or false) and all have safe defaults, so they can be left unset. The app is designed for a Railway/PaaS deployment where TLS terminates at the platform edge.
+
+   - `TRUST_PROXY_SSL_HEADER` (default `false`): trust `X-Forwarded-Proto` to determine the original request scheme (sets Django's `SECURE_PROXY_SSL_HEADER`). **On Railway (or any TLS-terminating proxy) set this to `true`.** Because TLS is terminated at the edge, requests reach the app over plaintext HTTP; without this flag Django thinks every request is insecure and `SECURE_SSL_REDIRECT` sends it into an infinite `301` redirect loop. Only enable it behind a proxy that overwrites any client-supplied `X-Forwarded-Proto` — otherwise the header is spoofable.
+   - `SECURE_SSL_REDIRECT` (default `true` in production): redirect all HTTP requests to HTTPS. Set to `false` only as an incident kill-switch (e.g. to break a redirect loop while debugging proxy config).
+   - `SECURE_HSTS_SECONDS` (default `3600` = 1 hour): HSTS max-age. HSTS is a hard-to-reverse browser commitment — if HTTPS breaks, clients that cached the header are locked out until it expires. Start conservative and ramp the value up only once HTTPS is proven stable, e.g. **1 hour → 1 day → 1 week → 1 year (`31536000`)**.
+   - `SECURE_HSTS_INCLUDE_SUBDOMAINS` (default `false`) and `SECURE_HSTS_PRELOAD` (default `false`): keep both off until HSTS has run at a long max-age with zero HTTPS incidents; preload is effectively irreversible.
+
+   > Health-check note (deployment): with `SECURE_SSL_REDIRECT` on, a platform health check that hits the app over internal HTTP without an `X-Forwarded-Proto: https` header will get a `301` and may be marked unhealthy. Mitigate by exempting the health path (`SECURE_REDIRECT_EXEMPT = [r"^healthz$"]`) or by pointing the health check at the public HTTPS domain.
 
 7. Before starting the server, fetch the coins from the CoinGecko API and populate the database:
 
@@ -135,6 +150,9 @@ python manage.py test
 ```
 
 ## Development Tools
+
+Ruff and pre-commit are installed by `requirements-dev.txt` (Installation step 1);
+they are dev-only and are not part of the runtime `requirements.txt`.
 
 Ruff is the code-quality tool for this project:
 

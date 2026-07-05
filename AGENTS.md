@@ -6,6 +6,12 @@ This file provides guidance to AI agents when working with code in this reposito
 
 All commands assume the virtualenv is active (`source venv/bin/activate`) and require env vars set (see Environment below — settings will not import without `SECRET_KEY` and `CSRF_TRUSTED_ORIGINS`).
 
+Dependencies are split: `requirements.txt` holds runtime deps only (what a production/PaaS build installs); `requirements-dev.txt` includes it (`-r requirements.txt`) plus dev tooling (Ruff, pre-commit). For development/agent work, install the dev file — Ruff and pre-commit are not in the runtime file:
+
+```bash
+pip install -r requirements-dev.txt   # runtime + dev tooling (Ruff, pre-commit)
+```
+
 ```bash
 python manage.py migrate              # apply DB migrations
 python manage.py createcachetable     # create the DB-backed cache table (required once)
@@ -32,10 +38,19 @@ Tests need the DB user to have CONNECT privilege on the `postgres` database (Dja
 Loaded from a `.env` file in the project root (via python-dotenv) or the process environment. See `.env.example`.
 
 - `SECRET_KEY` — **required** (`settings.py` reads it at module load, no fallback). `manage.py check` fails without it.
-- `CSRF_TRUSTED_ORIGINS` — **required** (comma-separated list of origins), read at module load.
+- `CSRF_TRUSTED_ORIGINS` — **required in production** (comma-separated list of origins, each including a scheme); in development defaults to `http://localhost:8000,http://127.0.0.1:8000`.
 - `COINGECKO_KEY` — optional at import (defaults to `""`), but required at runtime for any CoinGecko request. A system check (`coins.W001`) warns when it is unset.
 - `DATABASE_URI` — optional, parsed by `dj_database_url`. Defaults to `postgres://crypto_track@/crypto_track`.
-- `PYTHON_ENV` — `DEBUG` is on unless this equals `production`.
+- `DJANGO_DEBUG` — boolean opt-in for development. Unset/false → `DEBUG` off (production posture; `SECRET_KEY`/`ALLOWED_HOSTS`/`CSRF_TRUSTED_ORIGINS` become required). Set `true` for local dev/test/CI. Fail-closed: a malformed value raises `ImproperlyConfigured`.
+
+### Production security (active only when `DEBUG` is off)
+`settings.py` has an `if not DEBUG:` block (right after the `CSRF_TRUSTED_ORIGINS` prod branch) that hardens the deployment. Target is Railway/PaaS — TLS terminates at the platform edge and requests reach the app over plaintext HTTP. All knobs have safe defaults, so they can be left unset.
+
+- `TRUST_PROXY_SSL_HEADER` — bool, default `false`. When true, sets `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")`. **Must be `true` on Railway.** Two failure modes: enabling it without a header-stripping proxy trusts a spoofable header; leaving it off *behind* a TLS-terminating proxy makes `SECURE_SSL_REDIRECT` loop forever (`301 → 301 → …`).
+- `SECURE_SSL_REDIRECT` — bool, default `true`. Env-overridable as an incident kill-switch. **Health-check interaction (step 16):** an internal-HTTP health check without `X-Forwarded-Proto: https` gets a `301`; mitigate with `SECURE_REDIRECT_EXEMPT` for the health path or health-check the public HTTPS domain.
+- `SECURE_HSTS_SECONDS` — int, default `3600` (1h). HSTS is a hard-to-reverse browser commitment; ramp up manually (1h → 1d → 1wk → 1yr / `31536000`) only after HTTPS is proven.
+- `SECURE_HSTS_INCLUDE_SUBDOMAINS` / `SECURE_HSTS_PRELOAD` — bool, both default `false`; keep off until HSTS has run at a long max-age (preload is effectively irreversible).
+- `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` — hardcoded `True` in production (no env knob).
 
 ## Architecture
 

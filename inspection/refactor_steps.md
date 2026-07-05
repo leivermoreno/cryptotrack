@@ -146,21 +146,89 @@ marked ✅.
 
    Goal: remove production footguns before deeper refactors add more surface area.
 
-   - 3.1 Replace wildcard production `ALLOWED_HOSTS` with environment-driven hosts.
-   - 3.2 Require a real secret key outside development.
-   - 3.3 Parse `CSRF_TRUSTED_ORIGINS` safely instead of raising raw `KeyError`.
-   - 3.4 Add production security settings for HTTPS redirect, secure cookies, HSTS,
+   - 3.1 ✅ Replace wildcard production `ALLOWED_HOSTS` with environment-driven hosts.
+     Decision: branch on `DEBUG`. Dev defaults to `["localhost", "127.0.0.1"]`;
+     production requires `ALLOWED_HOSTS` via `env_list` and raises
+     `ImproperlyConfigured` if `*` is present (wildcard never allowed in prod).
+     Django's test runner appends `testserver` automatically, so tests need no
+     host env var; CI (DEBUG=True) uses the localhost default. Added the env var
+     to `.env.example`/README.
+   - 3.2 ✅ Require a real secret key outside development.
+     Decision: `if DEBUG:` uses a hardcoded, obviously-insecure fallback
+     (`"dev-insecure-do-not-use-in-production"`) chosen over a per-process random
+     key for stability/auditability; production (`else`) requires `SECRET_KEY`
+     and raises when unset. The fallback is unreachable when `DEBUG` is False.
+     `SECRET_KEY` moved below the `DEBUG` line so it can consume it. Removed
+     `SECRET_KEY` from CI so CI exercises the zero-config path.
+   - 3.3 ✅ Parse `CSRF_TRUSTED_ORIGINS` safely instead of raising raw `KeyError`.
+     Decision: already routed through `env_list` (raises `ImproperlyConfigured`,
+     not `KeyError`); the remaining fix was the unconditional requirement. Now
+     branches on `DEBUG` — dev defaults to
+     `["http://localhost:8000", "http://127.0.0.1:8000"]` (scheme + runserver
+     port), production still required plus a light guard that rejects entries
+     missing a `://` scheme (prevents silent CSRF 403s). Removed from CI;
+     completes the zero-config fresh-checkout story (with 3.2).
+   - 3.4 ✅ Add production security settings for HTTPS redirect, secure cookies, HSTS,
      and proxy SSL handling where appropriate.
-   - 3.5 Replace `PYTHON_ENV != "production"` with an explicit debug/env parser that
+     Decision (deploy target confirmed as **Railway/PaaS**, **conservative HSTS
+     ramp**): a single `if not DEBUG:` block — `SECURE_SSL_REDIRECT`
+     (env-overridable kill-switch, default True), hardcoded
+     `SESSION_COOKIE_SECURE`/`CSRF_COOKIE_SECURE`, HSTS env knobs
+     (`SECURE_HSTS_SECONDS` default 3600, subdomains/preload OFF, ramp toward 1yr
+     via env), and `SECURE_PROXY_SSL_HEADER` gated on an opt-in
+     `TRUST_PROXY_SSL_HEADER` flag (Railway sets it `true`; default False avoids
+     the spoofable-header risk and off-behind-proxy redirect loop). Simulated-prod
+     `check --deploy` clears W004/W008/W012/W016; remaining W005/W021 are the
+     accepted conservative-HSTS choices. Health-check ↔ SSL-redirect interaction
+     and `SECURE_REDIRECT_EXEMPT` mitigation left as a step-16 breadcrumb.
+   - 3.5 ✅ Replace `PYTHON_ENV != "production"` with an explicit debug/env parser that
      fails closed.
-   - 3.6 Rename timeout settings with units, for example
+     Decision: dedicated boolean `DEBUG = env_bool("DJANGO_DEBUG", default=False)`
+     (approach A). Fail-closed — unset → production; a malformed value ("prod",
+     "Production") raises instead of silently enabling DEBUG. `PYTHON_ENV` removed
+     entirely (no alias; nothing else read it). Dev opt-in (`DJANGO_DEBUG=true`)
+     added to CI env and `scripts/verify_setup.sh` (`${DJANGO_DEBUG:-true}`) in the
+     same change so CI/fresh checkouts stay green; `.env.example` ships it.
+     Verified: dev path green (121 tests), unset-in-clean-env raises
+     `ImproperlyConfigured` for required vars, and `DJANGO_DEBUG=prod` raises the
+     boolean-coercion error. NOTE: existing local `.env` files must add
+     `DJANGO_DEBUG=true` or they now boot into production posture.
+   - 3.6 ✅ Rename timeout settings with units, for example
      `CACHE_SUPPORTED_COINS_TIMEOUT_SECONDS`.
-   - 3.7 Split runtime and development dependencies if this will be deployed.
+     Decision: `CACHE_SUPPORTED_COINS_TIMEOUT` → `CACHE_SUPPORTED_COINS_TIMEOUT_SECONDS`
+     and `CACHE_INDEX_TABLE_DATA_TIMEOUT` → `CACHE_MARKET_PAGE_TIMEOUT_SECONDS`
+     (stem renamed too — the old name was misleading; the timeout applies to
+     per-page market data, not just the index). Internal module constants only,
+     no env/deploy impact. Local `services.py` aliases left as-is (proportionate).
+     The `runapscheduler.py:51` seconds-as-minutes bug was noted but left for
+     step 6.4.
+   - 3.7 ✅ Split runtime and development dependencies if this will be deployed.
+     Decision (deploy target Railway confirmed): two-file split, `requirements.txt`
+     (17 runtime lines) + `requirements-dev.txt` (`-r requirements.txt` + ruff,
+     pre-commit and their transitives). Kept the full partitioned freeze — every
+     pin retained, union reassembles to the original 28 lines exactly. Chosen over
+     pyproject `[project]` packaging (b/c) since this is a non-library app and
+     requirements.txt is already authoritative; Nixpacks then installs runtime-only
+     for prod automatically. CI switched to the dev file; README/AGENTS updated;
+     breadcrumb added that the prod build must install `requirements.txt` only.
 
    Verification:
 
-   - `manage.py check --deploy` has only accepted, documented warnings.
-   - Missing production secrets fail with clear configuration errors.
+   - ✅ Simulated-prod `manage.py check --deploy` clears W004/W008/W012/W016; only
+     W005/W021 remain, the deliberate conservative-HSTS choices (subdomains/preload
+     off), documented and accepted.
+   - ✅ Missing production secrets fail closed: with `DJANGO_DEBUG` unset (production
+     posture) and secrets stripped, settings import raises `ImproperlyConfigured`
+     naming the missing required var (SECRET_KEY / ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS),
+     rather than silently running with DEBUG=True.
+
+   Result: section 3 complete. All config footguns removed — no wildcard hosts, no
+   shared/implicit secret, safe CSRF parsing, production security block (SSL
+   redirect, secure cookies, conservative HSTS, opt-in proxy SSL header), a
+   fail-closed `DJANGO_DEBUG` parser (replacing `PYTHON_ENV`), unit-named cache
+   timeouts, and a runtime/dev dependency split. Suite stays green (121 tests, 23
+   expected failures) throughout; each change verified in both dev and simulated-prod
+   postures.
 
 4. **Centralize safe redirect handling**
 

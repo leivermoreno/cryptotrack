@@ -10,10 +10,11 @@
 #   3. manage.py createcachetable — DB-backed cache table exists (idempotent)
 #   4. manage.py test             — the suite passes against real PostgreSQL
 #
-# Every step is idempotent, so this is safe to re-run. Requires the env vars
-# from .env / the environment (SECRET_KEY, CSRF_TRUSTED_ORIGINS at import; see
-# README) and a running PostgreSQL instance with the privileges from
-# Installation step 2.
+# Every step is idempotent, so this is safe to re-run. Runs in DEBUG by default
+# (DJANGO_DEBUG defaults to true below) so a fresh checkout needs no secrets;
+# SECRET_KEY/ALLOWED_HOSTS/CSRF_TRUSTED_ORIGINS are required only in production
+# (DJANGO_DEBUG unset/false — see README). Requires a running PostgreSQL instance
+# with the privileges from Installation step 2.
 #
 # Usage:
 #   scripts/verify_setup.sh            # full verification
@@ -24,6 +25,11 @@ set -euo pipefail
 # Resolve the project root from this script's location so it works from any cwd.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
+
+# Fresh-checkout convenience: run in DEBUG unless the caller opts out. Keeps a
+# no-.env checkout running check/test without requiring production secrets.
+# Override with DJANGO_DEBUG=false to exercise the production import path.
+export DJANGO_DEBUG="${DJANGO_DEBUG:-true}"
 
 # Prefer the checked-in virtualenv interpreter; fall back to whatever `python`
 # is active (e.g. an already-activated venv).

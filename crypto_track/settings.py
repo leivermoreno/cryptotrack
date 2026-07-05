@@ -13,8 +13,9 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
-from crypto_track.env import env, env_list
+from crypto_track.env import env, env_bool, env_int, env_list
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,14 +24,94 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env("SECRET_KEY")
-
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env("PYTHON_ENV", default="") != "production"
+# Fail-closed: DEBUG is False unless the environment EXPLICITLY opts in via a
+# valid boolean. Unset -> False (production). A malformed value (e.g. "prod",
+# "Production") raises ImproperlyConfigured instead of silently enabling DEBUG.
+DEBUG = env_bool("DJANGO_DEBUG", default=False)
 
-ALLOWED_HOSTS = ["*"]
-CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+# SECURITY WARNING: keep the secret key used in production secret!
+if DEBUG:
+    # Zero-config fallback for development/test/CI only. Obviously insecure and
+    # unreachable when DEBUG is off, where SECRET_KEY is required.
+    SECRET_KEY = env("SECRET_KEY", default="dev-insecure-do-not-use-in-production")
+else:
+    SECRET_KEY = env("SECRET_KEY")  # required in production
+
+if DEBUG:
+    ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+else:
+    ALLOWED_HOSTS = env_list("ALLOWED_HOSTS")  # required in production
+    if "*" in ALLOWED_HOSTS:
+        raise ImproperlyConfigured(
+            "ALLOWED_HOSTS must not contain '*' when DEBUG is off; "
+            "list the explicit hostnames this app serves."
+        )
+if DEBUG:
+    # Zero-config default for development/test/CI. Django requires each origin
+    # to include a scheme; these cover runserver's default host:port.
+    CSRF_TRUSTED_ORIGINS = env_list(
+        "CSRF_TRUSTED_ORIGINS",
+        default=["http://localhost:8000", "http://127.0.0.1:8000"],
+    )
+else:
+    CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")  # required in production
+    missing_scheme = [origin for origin in CSRF_TRUSTED_ORIGINS if "://" not in origin]
+    if missing_scheme:
+        raise ImproperlyConfigured(
+            "CSRF_TRUSTED_ORIGINS entries must include a scheme "
+            f"(e.g. 'https://example.com'); got {missing_scheme}."
+        )
+
+
+# Production security hardening
+# https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+#
+# All of the following are inert in development (DEBUG on) and active only when
+# DEBUG is off. Deploy target is Railway/PaaS: TLS terminates at the platform
+# edge and requests reach this process over plaintext HTTP with the original
+# scheme in X-Forwarded-Proto (see SECURE_PROXY_SSL_HEADER below).
+if not DEBUG:
+    # --- HTTPS enforcement -------------------------------------------------
+    # Redirect all HTTP requests to HTTPS. Env-overridable as an incident
+    # kill-switch (e.g. to break a redirect loop while debugging proxy config).
+    #
+    # Step 16 (health checks): a platform health check that hits the app over
+    # internal HTTP without an "X-Forwarded-Proto: https" header will receive a
+    # 301 to HTTPS and may be marked unhealthy. Mitigate there by exempting the
+    # health path (e.g. SECURE_REDIRECT_EXEMPT = [r"^healthz$"]) or pointing the
+    # health check at the public HTTPS domain.
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=True)
+
+    # Only transmit session/CSRF cookies over HTTPS. Production is HTTPS-only,
+    # so there is no legitimate reason to expose these over plaintext.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+    # --- HSTS (HTTP Strict Transport Security) -----------------------------
+    # HSTS instructs browsers to refuse plaintext HTTP for this host for
+    # max-age seconds. It is a hard-to-reverse commitment: if HTTPS later
+    # breaks, clients that already cached the header are locked out until it
+    # expires. Start conservative (1 hour) and ramp the max-age up via env once
+    # the HTTPS setup is proven (target: 31536000 / 1 year). Subdomains and
+    # preload stay OFF until explicitly opted into.
+    SECURE_HSTS_SECONDS = env_int("SECURE_HSTS_SECONDS", default=3600)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool(
+        "SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False
+    )
+    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", default=False)
+
+    # --- Proxy TLS termination ---------------------------------------------
+    # When a TLS-terminating proxy/router (Railway, Heroku, most PaaS/LBs)
+    # forwards requests to the app over plaintext HTTP, Django only learns the
+    # original scheme from X-Forwarded-Proto. Enable ONLY when such a proxy
+    # exists AND it overwrites any client-supplied X-Forwarded-Proto (otherwise
+    # the header is spoofable -> a client could forge "https" -> security risk).
+    # Conversely, if this is omitted while behind a TLS-terminating proxy, every
+    # request looks like plaintext to Django and SECURE_SSL_REDIRECT loops
+    # forever (301 -> 301 -> ...). On Railway, set TRUST_PROXY_SSL_HEADER=true.
+    if env_bool("TRUST_PROXY_SSL_HEADER", default=False):
+        SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 # Application definition
@@ -104,8 +185,8 @@ CACHES = {
     }
 }
 
-CACHE_SUPPORTED_COINS_TIMEOUT = 3600 * 2  # 2 hours
-CACHE_INDEX_TABLE_DATA_TIMEOUT = 60
+CACHE_SUPPORTED_COINS_TIMEOUT_SECONDS = 3600 * 2  # 2 hours
+CACHE_MARKET_PAGE_TIMEOUT_SECONDS = 60
 
 
 # Password validation

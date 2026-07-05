@@ -1,0 +1,22 @@
+# Development dependencies (linting, formatting, git hooks) and their transitives.
+#
+# Installs runtime deps too, via the -r include below, so a single
+#   pip install -r requirements-dev.txt
+# gives contributors and CI everything.
+#
+# PRODUCTION / RAILWAY: do NOT install this file. The prod/PaaS build must
+# install ONLY `requirements.txt` — none of the tooling below is needed at
+# runtime and it should never ship to production.
+-r requirements.txt
+
+cfgv==3.5.0
+distlib==0.4.3
+filelock==3.29.5
+identify==2.6.19
+nodeenv==1.10.0
+platformdirs==4.10.0
+pre-commit==4.6.0
+python-discovery==1.4.3
+PyYAML==6.0.3
+ruff==0.15.20
+virtualenv==21.5.1
