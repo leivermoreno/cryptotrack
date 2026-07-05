@@ -133,3 +133,26 @@ privilege from Installation step 2 are required. To execute the test suite, run:
 ```bash
 python manage.py test
 ```
+
+## Verifying Your Setup
+
+After completing Installation, run the verification script to confirm the
+project is correctly configured from a clean checkout:
+
+```bash
+scripts/verify_setup.sh
+```
+
+It runs the setup steps in order and stops at the first failure, so a broken
+step is easy to spot:
+
+1. `manage.py check` — settings import and system checks pass.
+2. `manage.py migrate` — the database is reachable and migrations apply.
+3. `manage.py createcachetable` — the DB-backed cache table exists.
+4. `manage.py test` — the suite passes against real PostgreSQL.
+
+Every step is idempotent, so the script is safe to re-run. It uses the
+checked-in `venv/bin/python` if present (otherwise the active `python`) and
+requires the environment variables and PostgreSQL access described above. Pass
+arguments through to the test step to narrow the run, e.g.
+`scripts/verify_setup.sh coins`.

@@ -47,13 +47,17 @@ marked ✅.
      the WhiteNoise middleware after `SecurityMiddleware`. Documented in
      `README.md` ("Static Files"). Deployment specifics (prod server, process
      topology) remain in step 16.
-   - 1.7 Add a short setup verification path such as `manage.py check`, migrations,
-     cache table creation, and tests.
+   - 1.7 ✅ Add a short setup verification path such as `manage.py check`, migrations,
+     cache table creation, and tests. Added `scripts/verify_setup.sh`, which runs
+     `check` → `migrate` → `createcachetable` → `test` in order (idempotent,
+     stops at first failure, uses `venv/bin/python`). Documented in `README.md`
+     ("Verifying Your Setup").
 
    Verification:
 
-   - `venv/bin/python manage.py check`
-   - `CRYPTO_COINGECKO_KEY=dummy venv/bin/python manage.py test`
+   - `scripts/verify_setup.sh` (runs `check` and the full test suite; the
+     CoinGecko key is no longer required at import after 1.2, so no
+     `COINGECKO_KEY=dummy` prefix is needed)
 
 2. **Establish a safety-net test baseline**
 
