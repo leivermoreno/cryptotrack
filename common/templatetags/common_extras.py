@@ -2,6 +2,8 @@ from django import template
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
+from common.utils import build_query_string
+
 register = template.Library()
 
 
@@ -84,12 +86,29 @@ def sort_link(key, page, current_sort, current_direction, search, content):
         else:
             arrow = "&#8595;"
 
+    params = {
+        "page": page,
+        "sort": key,
+        "direction": direction,
+    }
     if search:
-        search = f"&search={search}"
+        params["search"] = search
 
-    html_template = "<a class='text-decoration-none' href='?page={}&sort={}&direction={}{}'>{} {}</a>"
+    html_template = "<a class='text-decoration-none' href='?{}'>{} {}</a>"
     html = format_html(
-        html_template, page, key, direction, search, content, mark_safe(arrow)
+        html_template, build_query_string(params), content, mark_safe(arrow)
     )
 
     return html
+
+
+@register.simple_tag
+def pagination_query(page, sort, direction, search=None, include_search=False):
+    params = {
+        "page": page,
+        "sort": sort,
+        "direction": direction,
+    }
+    if include_search and search:
+        params["search"] = search
+    return build_query_string(params)

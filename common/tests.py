@@ -16,22 +16,31 @@ inspection finding and the refactor step that will fix it.
 
 import unittest
 from decimal import Decimal
+from html import unescape
+from urllib.parse import parse_qs, urlsplit
 
 from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
-from django.utils.html import escape
 
 from common.decorators.views import validate_common_params
 from common.templatetags.common_extras import (
     format_amount,
     format_number,
     format_percentage,
+    pagination_query,
     percentage_change_class,
     sort_link,
 )
-from common.utils import add_direction_sign, get_common_params, get_safe_redirect_url
+from common.utils import (
+    InvalidQueryState,
+    QueryState,
+    add_direction_sign,
+    get_common_params,
+    get_safe_redirect_url,
+    normalize_query_state,
+)
 
 # The coins app's real ALLOWED_SORTS keys, used to drive the decorator tests.
 ALLOWED_SORTS = {
@@ -241,10 +250,86 @@ class GetSafeRedirectUrlTests(SimpleTestCase):
 
 
 # ---------------------------------------------------------------------------
-# B) validate_common_params decorator (common/decorators/views.py)
+# B) normalize_query_state helper (common/utils.py)
+# ---------------------------------------------------------------------------
+class NormalizeQueryStateTests(SimpleTestCase):
+    """Validate the intended page/sort/direction normalization API."""
+
+    def setUp(self):
+        self.rf = RequestFactory()
+
+    def _state(self, query="", page_count=None):
+        request = self.rf.get("/coins/" + query)
+        return normalize_query_state(
+            request,
+            allowed_sorts=ALLOWED_SORTS,
+            default_sort="rank",
+            default_direction="asc",
+            page_count=page_count,
+        )
+
+    def test_defaults_when_params_absent(self):
+        self.assertEqual(
+            self._state("", page_count=3),
+            QueryState(page=1, sort="rank", direction="asc"),
+        )
+
+    def test_page_clamped_to_page_count(self):
+        self.assertEqual(
+            self._state("?page=99", page_count=3),
+            QueryState(page=3, sort="rank", direction="asc"),
+        )
+
+    def test_zero_page_count_treated_as_one(self):
+        self.assertEqual(
+            self._state("?page=5", page_count=0),
+            QueryState(page=1, sort="rank", direction="asc"),
+        )
+
+    def test_valid_sort_direction_passthrough(self):
+        self.assertEqual(
+            self._state("?page=2&sort=coin&direction=desc", page_count=5),
+            QueryState(page=2, sort="coin", direction="desc"),
+        )
+
+    def test_whitespace_is_stripped_before_use(self):
+        self.assertEqual(
+            self._state("?page=%202%20&sort=%20rank%20&direction=%20asc%20"),
+            QueryState(page=2, sort="rank", direction="asc"),
+        )
+
+    def test_blank_values_use_defaults(self):
+        self.assertEqual(
+            self._state("?page=&sort=&direction=", page_count=3),
+            QueryState(page=1, sort="rank", direction="asc"),
+        )
+
+    def test_non_integer_page_is_invalid(self):
+        with self.assertRaises(InvalidQueryState):
+            self._state("?page=abc", page_count=3)
+
+    def test_page_less_than_one_is_invalid(self):
+        with self.assertRaises(InvalidQueryState):
+            self._state("?page=0", page_count=3)
+
+    def test_unknown_sort_is_invalid(self):
+        with self.assertRaises(InvalidQueryState):
+            self._state("?sort=nope&direction=asc")
+
+    def test_invalid_direction_is_invalid(self):
+        with self.assertRaises(InvalidQueryState):
+            self._state("?sort=rank&direction=up")
+
+    def test_partial_sort_direction_pair_is_invalid(self):
+        with self.assertRaises(InvalidQueryState):
+            self._state("?sort=rank")
+
+
+# ---------------------------------------------------------------------------
+# C) validate_common_params compatibility decorator (common/decorators/views.py)
 # ---------------------------------------------------------------------------
 class ValidateCommonParamsTests(SimpleTestCase):
-    """Characterize the validate_common_params redirect/pass behavior."""
+    """Validate the compatibility decorator redirect/pass behavior."""
 
     def setUp(self):
         self.rf = RequestFactory()
@@ -297,23 +382,49 @@ class ValidateCommonParamsTests(SimpleTestCase):
         self.assertEqual(resp.status_code, 302)
 
     def test_trailing_whitespace_sort_does_not_redirect(self):
-        # CURRENT behavior: the decorator .strip()s sort/direction for
-        # validation, so "rank " validates as "rank" and the view runs.
-        # BUT the whitespace is NOT stripped downstream: get_common_params
-        # returns the raw "rank " (see GetCommonParamsTests below). The real
-        # defect is the decorator/parser disagreement -- inspection/common.md
-        # "High-value bugs" #3 (step 7.2). It cannot be cleanly asserted at the
-        # decorator level alone; the passthrough test in C documents the raw
-        # value that leaks through.
+        # The compatibility decorator validates through normalize_query_state,
+        # which strips the value before checking the allow-list.
         resp = self._call("?sort=rank%20&direction=asc")
         self.assertEqual(resp.status_code, 200)
 
+    def test_decorated_view_sees_stripped_common_params(self):
+        @validate_common_params(ALLOWED_SORTS)
+        def view(request):
+            return HttpResponse(
+                f"{request.GET['page']}:{request.GET['sort']}:"
+                f"{request.GET['direction']}"
+            )
+
+        request = self.rf.get(
+            "/coins/?page=%202%20&sort=%20rank%20&direction=%20asc%20"
+        )
+        resp = view(request)
+
+        self.assertEqual(resp.content, b"2:rank:asc")
+
+    def test_decorated_view_sees_blank_common_params_as_absent(self):
+        @validate_common_params(ALLOWED_SORTS)
+        def view(request):
+            return HttpResponse(
+                f"{request.GET.get('page', 'default-page')}:"
+                f"{request.GET.get('sort', 'default-sort')}:"
+                f"{request.GET.get('direction', 'default-direction')}"
+            )
+
+        request = self.rf.get("/coins/?page=&sort=&direction=")
+        resp = view(request)
+
+        self.assertEqual(
+            resp.content,
+            b"default-page:default-sort:default-direction",
+        )
+
 
 # ---------------------------------------------------------------------------
-# C) get_common_params reader closure (common/utils.py)
+# D) get_common_params compatibility reader closure (common/utils.py)
 # ---------------------------------------------------------------------------
 class GetCommonParamsTests(SimpleTestCase):
-    """Characterize the get_common_params reader closure."""
+    """Validate the compatibility reader closure."""
 
     def setUp(self):
         self.rf = RequestFactory()
@@ -340,30 +451,41 @@ class GetCommonParamsTests(SimpleTestCase):
             (2, "coin", "desc"),
         )
 
-    def test_non_integer_page_raises_without_decorator(self):
-        # CHARACTERIZED GREEN (not expectedFailure): get_common_params does not
-        # catch ValueError from int(page). In production the validate_common_params
-        # decorator guards this (rejects non-int pages before the reader runs),
-        # so this is guarded-by-decorator design debt rather than a user-facing
-        # bug. Refactor step 7.2 centralizes normalization; this test pins the
-        # current unguarded contract so that change is deliberate.
-        with self.assertRaises(ValueError):
+    def test_non_integer_page_raises_invalid_query_state(self):
+        with self.assertRaises(InvalidQueryState):
             self._read("?page=abc", page_count=3)
 
-    def test_whitespace_sort_not_stripped_downstream(self):
-        # Documents inspection/common.md "High-value bugs" #3: the decorator
-        # strips "rank " to validate, but the reader returns it RAW. Step 7.2.
+    def test_whitespace_sort_stripped_downstream(self):
         self.assertEqual(
             self._read("?sort=rank%20&direction=asc", page_count=3),
-            (1, "rank ", "asc"),
+            (1, "rank", "asc"),
         )
+
+    def test_reader_uses_allowed_sorts_recorded_by_decorator(self):
+        read = self.read
+
+        @validate_common_params(ALLOWED_SORTS)
+        def view(request):
+            page, sort, direction = read(request, page_count=3)
+            return HttpResponse(f"{page}:{sort}:{direction}")
+
+        request = self.rf.get("/coins/?sort=coin&direction=desc")
+        resp = view(request)
+
+        self.assertEqual(resp.content, b"1:coin:desc")
 
 
 # ---------------------------------------------------------------------------
-# D) sort_link simple tag (common/templatetags/common_extras.py)
+# E) sort_link simple tag (common/templatetags/common_extras.py)
 # ---------------------------------------------------------------------------
 class SortLinkTests(SimpleTestCase):
     """Characterize the sort_link table-header link builder."""
+
+    def _query_params(self, html):
+        href_start = html.index("href='") + len("href='")
+        href_end = html.index("'", href_start)
+        href = unescape(html[href_start:href_end])
+        return parse_qs(urlsplit(href).query, keep_blank_values=True)
 
     def test_current_sort_flips_direction_and_shows_up_arrow(self):
         html = str(sort_link("rank", 1, "rank", "asc", "", "Rank"))
@@ -381,32 +503,52 @@ class SortLinkTests(SimpleTestCase):
 
     def test_href_contains_expected_query_keys(self):
         html = str(sort_link("rank", 2, "coin", "asc", "btc", "Rank"))
-        self.assertIn("page=2", html)
-        self.assertIn("sort=rank", html)
-        self.assertIn("direction=", html)
-        # search key is emitted when a search term is supplied (HTML-escaped &).
-        self.assertIn("search=btc", html)
+        params = self._query_params(html)
+
+        self.assertEqual(params["page"], ["2"])
+        self.assertEqual(params["sort"], ["rank"])
+        self.assertEqual(params["direction"], ["asc"])
+        self.assertEqual(params["search"], ["btc"])
 
     def test_no_search_omits_search_param(self):
         html = str(sort_link("rank", 1, "coin", "asc", "", "Rank"))
         self.assertNotIn("search=", html)
 
-    # KNOWN BUG: sort_link does not URL-encode the search value; it interpolates
-    # the raw string (only HTML-escaped by format_html). A search term with
-    # spaces / reserved chars produces a broken query string.
-    # inspection/common.md "High-value bugs" #4. Fix: refactor step 7.3/7.4.
-    # The assertion focuses on URL-encoding of the query value (not HTML
-    # escaping): after the fix the value should appear percent-encoded.
-    @unittest.expectedFailure
     def test_search_value_is_url_encoded(self):
-        html = str(sort_link("rank", 1, "coin", "asc", "a b&c=d", "Rank"))
-        # Correct: percent-encoded (quote: "a%20b%26c%3Dd" or quote_plus:
-        # "a+b%26c%3Dd"). Currently the raw "a b&c=d" is interpolated (with the
-        # "&" merely HTML-escaped to "&amp;"), so no percent-encoding appears.
-        self.assertTrue(
-            ("a%20b%26c%3Dd" in html) or ("a+b%26c%3Dd" in html),
-            msg=f"search value not URL-encoded in href: {html!r}",
+        html = str(sort_link("rank", 1, "coin", "asc", "a b&c=d?e", "Rank"))
+
+        self.assertIn("search=a+b%26c%3Dd%3Fe", html)
+        self.assertEqual(self._query_params(html)["search"], ["a b&c=d?e"])
+
+
+class PaginationQueryTagTests(SimpleTestCase):
+    """Validate the shared query-string builder used by pagination templates."""
+
+    def _params(self, query):
+        return parse_qs(query, keep_blank_values=True)
+
+    def test_preserves_page_sort_direction(self):
+        query = pagination_query(3, "price", "desc")
+
+        self.assertEqual(
+            self._params(query),
+            {
+                "page": ["3"],
+                "sort": ["price"],
+                "direction": ["desc"],
+            },
         )
+
+    def test_preserves_encoded_search_only_when_requested(self):
+        query = pagination_query(2, "coin", "asc", "a b&c=d?e", True)
+
+        self.assertIn("search=a+b%26c%3Dd%3Fe", query)
+        self.assertEqual(self._params(query)["search"], ["a b&c=d?e"])
+
+    def test_omits_search_when_not_requested(self):
+        query = pagination_query(2, "coin", "asc", "a b&c=d?e", False)
+
+        self.assertNotIn("search", self._params(query))
 
 
 # ---------------------------------------------------------------------------
@@ -419,19 +561,34 @@ class PaginationPartialTests(SimpleTestCase):
         self.rf = RequestFactory()
         self.paginator = Paginator(list(range(25)), 10)  # 3 pages
 
-    def _render(self, page_number):
+    def _render(self, page_number, **extra_context):
         request = self.rf.get("/coins/search/")
+        context = {
+            "page_obj": self.paginator.page(page_number),
+            "sort": "rank",
+            "direction": "asc",
+            "send_search": True,
+            "search_query": "btc",
+        }
+        context.update(extra_context)
         return render_to_string(
             "common/partials/pagination.html",
-            {
-                "page_obj": self.paginator.page(page_number),
-                "sort": "rank",
-                "direction": "asc",
-                "send_search": True,
-                "search_query": "btc",
-            },
+            context,
             request=request,
         )
+
+    def _hrefs(self, html):
+        hrefs = []
+        start = 0
+        while True:
+            href_start = html.find('href="', start)
+            if href_start == -1:
+                break
+            href_start += len('href="')
+            href_end = html.index('"', href_start)
+            hrefs.append(unescape(html[href_start:href_end]))
+            start = href_end + 1
+        return hrefs
 
     def test_first_page_has_next_only(self):
         html = self._render(1)
@@ -456,23 +613,22 @@ class PaginationPartialTests(SimpleTestCase):
         self.assertIn("direction=asc", html)
         self.assertIn("search=btc", html)
 
-    def test_always_renders_hardcoded_back_to_market_link(self):
-        # CURRENT behavior: the "common" partial hard-codes a "Back to Market"
-        # button pointing at coins:index (resolves to "/"), so every consumer
-        # (incl. portfolio transaction pages) inherits it. Refactor step 7.6
-        # will make the back-link generic/optional. Characterized GREEN.
+    def test_omits_back_link_by_default(self):
         html = self._render(1)
-        self.assertIn("Back to Market", html)
-        self.assertIn('href="/"', html)
+        self.assertNotIn("Back to Market", html)
+        self.assertNotIn("btn btn-secondary", html)
 
-    def test_search_query_not_url_encoded_in_partial(self):
-        # Companion to the sort_link bug: the partial also concatenates
-        # search_query without URL-encoding (inspection/common.md
-        # "High-value bugs" #4). This is a render-level characterization of the
-        # CURRENT behavior -- a plain term ("btc") is emitted verbatim. NOT an
-        # expectedFailure here: the reusable-partial/encoding fix is tracked at
-        # the tag level (SortLinkTests) and refactor step 7.3/7.4/7.6; this
-        # simply documents that the partial performs no encoding today.
+    def test_renders_optional_generic_back_link(self):
+        html = self._render(
+            1,
+            pagination_back_url="/portfolio/",
+            pagination_back_label="Back to Portfolio",
+        )
+
+        self.assertIn("Back to Portfolio", html)
+        self.assertIn('href="/portfolio/"', html)
+
+    def test_search_query_is_url_encoded_in_partial(self):
         request = self.rf.get("/coins/search/")
         html = render_to_string(
             "common/partials/pagination.html",
@@ -481,23 +637,21 @@ class PaginationPartialTests(SimpleTestCase):
                 "sort": "rank",
                 "direction": "asc",
                 "send_search": True,
-                "search_query": "a b",
+                "search_query": "a b&c=d?e",
             },
             request=request,
         )
-        # Django auto-escapes HTML but does not URL-encode: the raw space
-        # survives (would be "%20" or "+" if encoded).
-        self.assertIn("search=" + escape("a b"), html)
-        self.assertNotIn("search=a%20b", html)
 
-    @unittest.expectedFailure
+        self.assertIn("search=a+b%26c%3Dd%3Fe", html)
+        next_href = next(
+            href
+            for href in self._hrefs(html)
+            if href.startswith("/coins/search/?page=2")
+        )
+        params = parse_qs(urlsplit(next_href).query, keep_blank_values=True)
+        self.assertEqual(params["search"], ["a b&c=d?e"])
+
     def test_search_query_should_be_url_encoded_in_partial(self):
-        # Desired-behavior companion to the green characterization above. The
-        # tag-level fix is asserted by SortLinkTests.test_search_value_is_url_encoded,
-        # but the partial template concatenates search_query into href directly
-        # (pagination.html:5 and :11) with no encoding, so it needs its own
-        # expected-failure so the reusable-partial/encoding fix (refactor step
-        # 7.3/7.4/7.6) is not blocked by a green test freezing the bug.
         request = self.rf.get("/coins/search/")
         html = render_to_string(
             "common/partials/pagination.html",
@@ -510,8 +664,5 @@ class PaginationPartialTests(SimpleTestCase):
             },
             request=request,
         )
-        # Correct: percent-encoded (quote: "a%20b" or quote_plus: "a+b").
-        self.assertTrue(
-            ("search=a%20b" in html) or ("search=a+b" in html),
-            msg=f"search value not URL-encoded in partial href: {html!r}",
-        )
+
+        self.assertIn("search=a+b", html)

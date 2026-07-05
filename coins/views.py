@@ -40,10 +40,11 @@ def render_index(request):
         # manual pagination and redirect because data comes from external API
         page_count = get_page_count()
         page, sort, direction = get_common_params(request, page_count=page_count)
+        page_obj = Paginator(range(page_count), 1).page(page)
         coin_list = get_coin_list_with_market(page, sort, direction)
         context = {
             "page_number": page,
-            "page_count": page_count,
+            "page_obj": page_obj,
             "coin_list": coin_list,
             "sort": sort,
             "direction": direction,

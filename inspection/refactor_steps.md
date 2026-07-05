@@ -227,15 +227,47 @@ sections keep their full task lists.
    Goal: make list/table behavior consistent across `coins`, `portfolio`, and
    future screens.
 
-   - 7.1 Replace the split `validate_common_params` plus `get_common_params` contract
+   - 7.1 ✅ Replace the split `validate_common_params` plus `get_common_params` contract
      with one normalized query-state helper.
-   - 7.2 Strip and validate page, sort, and direction in one place.
-   - 7.3 Build encoded query strings through `QueryDict` or `urlencode`.
-   - 7.4 Preserve intended params consistently across sort links and pagination.
-   - 7.5 Fix portfolio transaction page clamping by using real `Paginator.num_pages`.
-   - 7.6 Make the common pagination partial generic; remove the hard-coded "Back to
+     Decision/Solution: added `common.utils.normalize_query_state()` returning a small
+     `QueryState` object for normalized `page`/`sort`/`direction`, with a dedicated
+     `InvalidQueryState` for bad user input. The existing decorator and reader stay as
+     compatibility wrappers, but both now delegate to the same normalization path so
+     validation, defaulting, clamping, and whitespace handling no longer diverge.
+   - 7.2 ✅ Strip and validate page, sort, and direction in one place.
+     Decision/Solution: `normalize_query_state()` remains the single parser and
+     validator for common `page`/`sort`/`direction` params. The validation
+     decorator now syncs only supplied common query keys back onto `request.GET`,
+     replacing nonblank values with stripped normalized values and removing blank
+     common keys so downstream defaults still behave as if the params were absent.
+   - 7.3 ✅ Build encoded query strings through `QueryDict` or `urlencode`.
+     Decision/Solution: added a narrow `common.utils.build_query_string()` helper
+     backed by `QueryDict.urlencode()`. `sort_link` and the shared pagination
+     partial now build query strings from structured params, so search terms with
+     spaces, ampersands, equals signs, and question marks round-trip correctly.
+   - 7.4 ✅ Preserve intended params consistently across sort links and pagination.
+     Decision/Solution: kept `page`/`sort`/`direction`/optional `search` query
+     construction centralized through `pagination_query`/`build_query_string`.
+     Sort links and shared pagination now preserve the same intended state, and
+     stateful form `next` values in the coins and portfolio tables use the same
+     encoded query path instead of manual string concatenation.
+   - 7.5 ✅ Fix portfolio transaction page clamping by using real `Paginator.num_pages`.
+     Decision/Solution: `show_all_transactions` and `create_portfolio_transaction`
+     now derive clamping from a Django `Paginator` for the relevant transaction
+     queryset, so high requested pages clamp to the actual last page instead of an
+     item count that can still raise `EmptyPage`.
+   - 7.6 ✅ Make the common pagination partial generic; remove the hard-coded "Back to
      Market" action from it.
-   - 7.7 Make the market index use the same pagination behavior as other pages.
+     Decision/Solution: the shared pagination partial no longer links to the market
+     by default. It renders an optional generic back action only when callers supply
+     both `pagination_back_url` and `pagination_back_label`, so portfolio pagination
+     no longer inherits a market-specific button.
+   - 7.7 ✅ Make the market index use the same pagination behavior as other pages.
+     Decision/Solution: the market index now creates a Django `Paginator` from the
+     CoinGecko-reported page count and passes `page_obj` to the same shared
+     pagination partial used by search/watchlist pages. The external API call still
+     receives the normalized requested page, while pagination links preserve
+     `page`/`sort`/`direction` through the common query builder.
 
    Verification:
 

@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
@@ -164,9 +163,7 @@ class CoinsViewsTest(TestCase):
 # ---------------------------------------------------------------------------
 # Subtask 2.4 additions: watchlist toggling, invalid ids, inactive coins,
 # query preservation, and unsafe ``next`` values.
-# Section 2 safety-net baseline: GREEN characterizations of current behavior,
-# plus ``@unittest.expectedFailure`` for known bugs (asserting the desired
-# correct behavior) so the suite stays green now and flips to XPASS once fixed.
+# Section 2 safety-net baseline: GREEN characterizations of current behavior.
 # ---------------------------------------------------------------------------
 
 
@@ -299,9 +296,7 @@ class InactiveCoinsTest(TestCase):
 
 
 class QueryPreservationTest(TestCase):
-    """Search preserves the term across pagination (GREEN); the index page's
-    custom prev/next pagination dropping sort/direction is a known bug
-    (expectedFailure)."""
+    """List pagination preserves intended query state."""
 
     def setUp(self):
         self.client = Client()
@@ -326,10 +321,48 @@ class QueryPreservationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         # The rendered next-page link carries page, sort, direction and search.
         self.assertContains(
-            response, "page=2&sort=price&direction=desc&search=Preserve"
+            response, "page=2&amp;sort=price&amp;direction=desc&amp;search=Preserve"
         )
 
-    @unittest.expectedFailure
+    @patch(
+        "coins.views.get_coin_list_with_market",
+        return_value=[make_market_coin(cg_id="special0", name="Special Preserve 0")],
+    )
+    def test_search_state_with_reserved_chars_is_encoded_in_links_and_next(
+        self, mock_market
+    ):
+        search = "Special Preserve & price=1?"
+        Coin.objects.bulk_create(
+            [
+                Coin(cg_id=f"special{i}", name=f"{search} {i}", symbol=f"SP{i}")
+                for i in range(101)
+            ]
+        )
+
+        response = self.client.get(
+            reverse(
+                "coins:search",
+                query={
+                    "search": search,
+                    "page": "1",
+                    "sort": "price",
+                    "direction": "desc",
+                },
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "page=2&amp;sort=price&amp;direction=desc&amp;"
+            "search=Special+Preserve+%26+price%3D1%3F",
+        )
+        self.assertContains(
+            response,
+            'value="/search/?page=1&amp;sort=price&amp;direction=desc&amp;'
+            'search=Special+Preserve+%26+price%3D1%3F"',
+        )
+
     @patch("coins.views.get_page_count", return_value=3)
     @patch(
         "coins.views.get_coin_list_with_market",
@@ -338,16 +371,11 @@ class QueryPreservationTest(TestCase):
     def test_index_pagination_preserves_sort_direction(
         self, mock_market, mock_page_count
     ):
-        # KNOWN BUG: inspection/coins.md "Index Flow" / Key Risks (index
-        # template pagination drops sort & direction). Fix in step 7.7.
-        # Desired: the custom prev/next links preserve sort=price&direction=desc.
-        # Currently coins/index.html renders only ``?page=N``, so this fails now
-        # and will XPASS after step 7.7.
         response = self.client.get(
             reverse("coins:index") + "?sort=price&direction=desc&page=1"
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "page=2&sort=price&direction=desc")
+        self.assertContains(response, "page=2&amp;sort=price&amp;direction=desc")
 
 
 class OpenRedirectTest(TestCase):

@@ -1,14 +1,19 @@
-<div class="pagination py-3 d-flex justify-content-between flex-grow-1">
-    <a href="{% url 'coins:index' %}" class="btn btn-secondary">Back to Market</a>
-    <span class="step-link">
+{% load common_extras %}
+<div class="pagination py-3 d-flex justify-content-between align-items-center flex-grow-1">
+    {% if pagination_back_url and pagination_back_label %}
+        <a href="{{ pagination_back_url }}" class="btn btn-secondary">{{ pagination_back_label }}</a>
+    {% endif %}
+    <span class="step-link ms-auto">
         {% if page_obj.has_previous %}
-            <a class="text-decoration-none me-3" href="{{ request.path }}?page={{ page_obj.previous_page_number }}&sort={{ sort }}&direction={{ direction }}{% if send_search %}&search={{ search_query }}{% endif %}">previous</a>
+            {% pagination_query page_obj.previous_page_number sort direction search_query send_search as previous_query %}
+            <a class="text-decoration-none me-3" href="{{ request.path }}?{{ previous_query }}">previous</a>
         {% endif %}
 
         {{ page_obj.number }}
 
         {% if page_obj.has_next %}
-            <a class="text-decoration-none ms-3" href="{{ request.path }}?page={{ page_obj.next_page_number }}&sort={{ sort }}&direction={{ direction }}{% if send_search %}&search={{ search_query }}{% endif %}">next</a>
+            {% pagination_query page_obj.next_page_number sort direction search_query send_search as next_query %}
+            <a class="text-decoration-none ms-3" href="{{ request.path }}?{{ next_query }}">next</a>
         {% endif %}
     </span>
 </div>

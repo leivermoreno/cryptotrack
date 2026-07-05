@@ -496,15 +496,20 @@ class TransactionPaginationTest(TestCase):
             )
         self.client.login(username="pg", password="pass")
 
-    @unittest.expectedFailure
     def test_all_transactions_high_page_does_not_raise(self):
-        # BUG (inspection/portfolio.md): show_all_transactions passes
-        # len(transactions) (item count) as the page count, so a page number above
-        # the real page count but within the item count reaches
-        # Paginator.page(n) and raises EmptyPage. Step 7.5 should clamp using real
-        # Paginator.num_pages.
         response = self.client.get(reverse("portfolio:all_transactions") + "?page=2")
-        self.assertIn(response.status_code, (200, 302))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["page_obj"].number, 1)
+        self.assertEqual(response.context["page_obj"].paginator.num_pages, 1)
+        self.assertNotContains(response, "Back to Market")
+
+    def test_coin_transactions_high_page_does_not_raise(self):
+        response = self.client.get(
+            reverse("portfolio:add_transaction", args=[self.coin.id]) + "?page=2"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["page_obj"].number, 1)
+        self.assertEqual(response.context["page_obj"].paginator.num_pages, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -530,7 +535,8 @@ class DeletePathTest(TestCase):
         response = self.client.get(reverse("portfolio:all_transactions") + query)
 
         expected_next = (
-            reverse("portfolio:all_transactions") + "?page=2&sort=price&direction=asc"
+            reverse("portfolio:all_transactions")
+            + "?page=2&amp;sort=price&amp;direction=asc"
         )
         self.assertContains(response, f'value="{expected_next}"')
         self.assertNotContains(response, "ignored=1")

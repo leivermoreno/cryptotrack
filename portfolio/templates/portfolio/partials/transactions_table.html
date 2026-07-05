@@ -34,8 +34,12 @@
                     <form action="{% url 'portfolio:delete_transaction' coin_id=tx.coin.id transaction_id=tx.id %}"
                           method="post">
                         {% csrf_token %}
-                        <input type="hidden" name="next"
-                               value="{% if transaction %}{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}{% else %}{{ request.path }}?page={{ page_obj.number }}&sort={{ sort }}&direction={{ direction }}{% endif %}">
+                        {% if transaction %}
+                            <input type="hidden" name="next" value="{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}">
+                        {% else %}
+                            {% pagination_query page_obj.number sort direction as next_query %}
+                            <input type="hidden" name="next" value="{{ request.path }}?{{ next_query }}">
+                        {% endif %}
                         <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none">Delete</button>
                     </form>
                 </td>
