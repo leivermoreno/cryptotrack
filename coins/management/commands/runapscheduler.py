@@ -9,27 +9,26 @@ from django_apscheduler.jobstores import DjangoJobStore
 from django_apscheduler.models import DjangoJobExecution
 
 from coins.exceptions import CoinGeckoError
-from coins.models import Coin
-from coins.services import SUPPORTED_COINS_TIMEOUT, get_supported_coin_list
+from coins.services import SUPPORTED_COINS_TIMEOUT
+from coins.sync import log_sync_result, sync_supported_coins
 from common.utils import log_coingecko_failure
 
 logger = logging.getLogger(__name__)
 
+SUPPORTED_COINS_SYNC_INTERVAL_SECONDS = SUPPORTED_COINS_TIMEOUT + 5 * 60
+
 
 @util.close_old_connections
-def save_new_supported_coins():
+def sync_supported_coins_job():
     try:
-        coin_list = get_supported_coin_list()
+        result = sync_supported_coins()
     except CoinGeckoError as exc:
-        # Never crash the blocking scheduler (or --run-now) on an API failure;
-        # skip this run and try again on the next interval.
+        # Never crash the blocking scheduler on an API failure; skip this run
+        # and try again on the next interval.
         log_coingecko_failure(logger, exc)
         return
-    coin_objs = [
-        Coin(cg_id=coin["id"], name=coin["name"], symbol=coin["symbol"])
-        for coin in coin_list
-    ]
-    Coin.objects.bulk_create(coin_objs, ignore_conflicts=True)
+
+    log_sync_result(logger, result)
 
 
 @util.close_old_connections
@@ -46,23 +45,16 @@ def delete_old_job_executions(max_age=604_800):
 
 
 class Command(BaseCommand):
-    def add_arguments(self, parser):
-        parser.add_argument(
-            "--run-now",
-            action="store_true",
-            help="Run the coin update task immediately before starting the scheduler.",
-        )
+    help = "Start APScheduler and run recurring jobs."
 
     def handle(self, *args, **options):
-        logger = logging.getLogger(__name__)
         scheduler = BlockingScheduler(timezone=settings.TIME_ZONE)
         scheduler.add_jobstore(DjangoJobStore(), "default")
 
-        minutes = SUPPORTED_COINS_TIMEOUT + 60 * 5  # add 5 minutes to get fresh
         scheduler.add_job(
-            save_new_supported_coins,
+            sync_supported_coins_job,
             "interval",
-            minutes=minutes,
+            seconds=SUPPORTED_COINS_SYNC_INTERVAL_SECONDS,
             id="save_new_supported_coins",
             max_instances=1,
             replace_existing=True,
@@ -78,8 +70,5 @@ class Command(BaseCommand):
             replace_existing=True,
         )
 
-        if options.get("run_now"):
-            logger.info("--run-now provided: Running coin update task immediately.")
-            save_new_supported_coins()
         logger.info("Starting APScheduler...")
         scheduler.start()

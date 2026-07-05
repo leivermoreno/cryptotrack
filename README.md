@@ -88,12 +88,19 @@ powered by the CoinGecko API.
 7. Before starting the server, fetch the coins from the CoinGecko API and populate the database:
 
    ```bash
-   python manage.py runapscheduler --run-now
+   python manage.py sync_supported_coins
    ```
 
-   You must run this at least once before starting the server. This custom command starts an APScheduler instance that
-   fetches the listed coins from CoinGecko every two hours to keep the database updated. The `--run-now` flag triggers
-   the job immediately.
+   You must run this at least once before starting the server.
+
+8. Start the scheduler in a separate foreground process when you want recurring catalog refreshes and scheduler cleanup:
+
+   ```bash
+   python manage.py runapscheduler
+   ```
+
+   This custom command starts an APScheduler instance that fetches the listed coins from CoinGecko every 2 hours and
+   5 minutes to keep the database updated.
 
 ## Running the Server
 

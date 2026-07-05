@@ -15,7 +15,8 @@ pip install -r requirements-dev.txt   # runtime + dev tooling (Ruff, pre-commit)
 ```bash
 python manage.py migrate              # apply DB migrations
 python manage.py createcachetable     # create the DB-backed cache table (required once)
-python manage.py runapscheduler --run-now   # populate Coin table from CoinGecko + start the sync scheduler
+python manage.py sync_supported_coins # populate Coin table from CoinGecko once
+python manage.py runapscheduler       # start the blocking recurring sync/maintenance scheduler
 python manage.py runserver            # dev server at http://localhost:8000
 python manage.py test                 # full test suite
 python manage.py test coins           # single app
@@ -29,7 +30,7 @@ pre-commit run --all-files            # run commit hooks across the repo
 pre-commit run --hook-stage pre-push --all-files   # run push hooks
 ```
 
-`runapscheduler --run-now` must be run at least once before the app is usable: the `Coin` table is empty otherwise and search/watchlist/portfolio all resolve local `Coin` rows. It runs a **blocking** scheduler (foreground process) that also re-syncs the coin list on an interval.
+`sync_supported_coins` must be run at least once before the app is usable: the `Coin` table is empty otherwise and search/watchlist/portfolio all resolve local `Coin` rows. `runapscheduler` runs a **blocking** scheduler (foreground process) that re-syncs the coin list on an interval and cleans old scheduler execution records.
 
 Tests need the DB user to have CONNECT privilege on the `postgres` database (Django creates a `test_*` database).
 

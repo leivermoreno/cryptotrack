@@ -2,15 +2,23 @@ import unittest
 from unittest.mock import patch
 
 from django.contrib.auth.models import User
+from django.core.management import call_command
 from django.db import IntegrityError
-from django.test import Client, TestCase, TransactionTestCase
+from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase
 from django.urls import reverse
 
 from coins.exceptions import (
     CoinGeckoResponseError,
     CoinGeckoUnavailableError,
 )
-from coins.management.commands.runapscheduler import save_new_supported_coins
+from coins.management.commands.runapscheduler import (
+    SUPPORTED_COINS_SYNC_INTERVAL_SECONDS,
+    sync_supported_coins_job,
+)
+from coins.management.commands.runapscheduler import (
+    Command as RunapschedulerCommand,
+)
+from coins.sync import SupportedCoinSyncResult, sync_supported_coins
 from common.test_utils import make_market_coin, market_response
 
 from .models import Coin, Watchlist
@@ -438,18 +446,240 @@ class CoinGeckoFallbackTest(TestCase):
         self.assertContains(response, MARKET_UNAVAILABLE_COPY)
 
 
-# ``save_new_supported_coins`` is wrapped in ``@util.close_old_connections``,
+class SupportedCoinSyncTest(TestCase):
+    @patch(
+        "coins.sync.get_supported_coin_list",
+        return_value=[
+            {"id": "bitcoin", "name": "Bitcoin", "symbol": "btc"},
+        ],
+    )
+    def test_sync_supported_coins_creates_missing_rows(self, mock_supported):
+        result = sync_supported_coins()
+
+        mock_supported.assert_called_once_with()
+        self.assertEqual(
+            result,
+            SupportedCoinSyncResult(
+                created=1, updated=0, deactivated=0, skipped=0, failed=0
+            ),
+        )
+        self.assertEqual(Coin.objects.count(), 1)
+
+        bitcoin = Coin.objects.get(cg_id="bitcoin")
+        self.assertEqual(bitcoin.name, "Bitcoin")
+        self.assertEqual(bitcoin.symbol, "btc")
+        self.assertTrue(bitcoin.is_active)
+
+    @patch(
+        "coins.sync.get_supported_coin_list",
+        return_value=[
+            {"id": "bitcoin", "name": "Bitcoin", "symbol": "btc"},
+        ],
+    )
+    def test_sync_supported_coins_updates_existing_rows_and_reactivates(
+        self, mock_supported
+    ):
+        Coin.objects.create(
+            cg_id="bitcoin",
+            name="Old Bitcoin",
+            symbol="OLD",
+            is_active=False,
+        )
+
+        result = sync_supported_coins()
+
+        mock_supported.assert_called_once_with()
+        self.assertEqual(
+            result,
+            SupportedCoinSyncResult(
+                created=0, updated=1, deactivated=0, skipped=0, failed=0
+            ),
+        )
+        self.assertEqual(Coin.objects.count(), 1)
+
+        bitcoin = Coin.objects.get(cg_id="bitcoin")
+        self.assertEqual(bitcoin.name, "Bitcoin")
+        self.assertEqual(bitcoin.symbol, "btc")
+        self.assertTrue(bitcoin.is_active)
+
+    @patch(
+        "coins.sync.get_supported_coin_list",
+        return_value=[
+            {"id": "bitcoin", "name": "Bitcoin", "symbol": "btc"},
+        ],
+    )
+    def test_sync_supported_coins_reactivates_unchanged_returned_rows(
+        self, mock_supported
+    ):
+        coin = Coin.objects.create(
+            cg_id="bitcoin",
+            name="Bitcoin",
+            symbol="btc",
+            is_active=False,
+        )
+
+        result = sync_supported_coins()
+
+        mock_supported.assert_called_once_with()
+        self.assertEqual(
+            result,
+            SupportedCoinSyncResult(
+                created=0, updated=1, deactivated=0, skipped=0, failed=0
+            ),
+        )
+        coin.refresh_from_db()
+        self.assertEqual(Coin.objects.count(), 1)
+        self.assertEqual(coin.name, "Bitcoin")
+        self.assertEqual(coin.symbol, "btc")
+        self.assertTrue(coin.is_active)
+
+    @patch(
+        "coins.sync.get_supported_coin_list",
+        return_value=[
+            {"id": "bitcoin", "name": "Bitcoin", "symbol": "btc"},
+        ],
+    )
+    def test_sync_supported_coins_deactivates_missing_rows(self, mock_supported):
+        bitcoin = Coin.objects.create(
+            cg_id="bitcoin",
+            name="Bitcoin",
+            symbol="btc",
+            is_active=True,
+        )
+        litecoin = Coin.objects.create(
+            cg_id="litecoin",
+            name="Litecoin",
+            symbol="ltc",
+            is_active=True,
+        )
+
+        result = sync_supported_coins()
+
+        mock_supported.assert_called_once_with()
+        self.assertEqual(
+            result,
+            SupportedCoinSyncResult(
+                created=0, updated=0, deactivated=1, skipped=1, failed=0
+            ),
+        )
+        bitcoin.refresh_from_db()
+        litecoin.refresh_from_db()
+        self.assertTrue(bitcoin.is_active)
+        self.assertFalse(litecoin.is_active)
+
+    @patch(
+        "coins.sync.get_supported_coin_list",
+        return_value=[
+            {"id": "bitcoin", "name": "Bitcoin", "symbol": "btc"},
+            {"name": "Missing ID", "symbol": "mid"},
+            {"id": "blank-name", "name": "", "symbol": "blk"},
+            {"id": "blank-symbol", "name": "Blank Symbol", "symbol": " "},
+            None,
+        ],
+    )
+    def test_sync_supported_coins_counts_malformed_rows_as_failed(self, mock_supported):
+        result = sync_supported_coins()
+
+        mock_supported.assert_called_once_with()
+        self.assertEqual(
+            result,
+            SupportedCoinSyncResult(
+                created=1, updated=0, deactivated=0, skipped=0, failed=4
+            ),
+        )
+        self.assertEqual(Coin.objects.count(), 1)
+        self.assertTrue(Coin.objects.filter(cg_id="bitcoin").exists())
+
+
+class SyncSupportedCoinsCommandTest(TestCase):
+    @patch("coins.management.commands.sync_supported_coins.sync_supported_coins")
+    def test_command_runs_sync_once(self, mock_sync):
+        mock_sync.return_value = SupportedCoinSyncResult(
+            created=1, updated=2, deactivated=3, skipped=4, failed=5
+        )
+
+        with self.assertLogs(
+            "coins.management.commands.sync_supported_coins", level="INFO"
+        ) as logs:
+            call_command("sync_supported_coins")
+
+        mock_sync.assert_called_once_with()
+        self.assertIn(
+            "created=1 updated=2 deactivated=3 skipped=4 failed=5",
+            logs.output[0],
+        )
+
+    @patch(
+        "coins.management.commands.sync_supported_coins.sync_supported_coins",
+        side_effect=CoinGeckoUnavailableError("down"),
+    )
+    def test_command_failure_skips_without_crashing(self, mock_sync):
+        Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        before = Coin.objects.count()
+
+        call_command("sync_supported_coins")
+
+        mock_sync.assert_called_once_with()
+        self.assertEqual(Coin.objects.count(), before)
+
+
+class RunapschedulerCommandTest(SimpleTestCase):
+    def test_runapscheduler_does_not_expose_run_now(self):
+        parser = RunapschedulerCommand().create_parser("manage.py", "runapscheduler")
+        option_dests = {action.dest for action in parser._actions}
+
+        self.assertNotIn("run_now", option_dests)
+
+    @patch("coins.management.commands.runapscheduler.DjangoJobStore")
+    @patch("coins.management.commands.runapscheduler.BlockingScheduler")
+    def test_sync_interval_uses_documented_seconds_cadence(
+        self, mock_scheduler_class, mock_job_store
+    ):
+        scheduler = mock_scheduler_class.return_value
+
+        RunapschedulerCommand().handle()
+
+        sync_job = scheduler.add_job.call_args_list[0]
+        self.assertEqual(sync_job.args[:2], (sync_supported_coins_job, "interval"))
+        self.assertEqual(
+            sync_job.kwargs["seconds"], SUPPORTED_COINS_SYNC_INTERVAL_SECONDS
+        )
+        self.assertEqual(sync_job.kwargs["seconds"], 2 * 60 * 60 + 5 * 60)
+        self.assertNotIn("minutes", sync_job.kwargs)
+        mock_job_store.assert_called_once_with()
+        scheduler.start.assert_called_once_with()
+
+
+# ``sync_supported_coins_job`` is wrapped in ``@util.close_old_connections``,
 # which closes the DB connection on exit — that would corrupt a ``TestCase``'s
 # wrapping transaction, so this lives in a ``TransactionTestCase``.
 class SchedulerFallbackTest(TransactionTestCase):
     @patch(
-        "coins.management.commands.runapscheduler.get_supported_coin_list",
+        "coins.management.commands.runapscheduler.sync_supported_coins",
+        return_value=SupportedCoinSyncResult(
+            created=1, updated=2, deactivated=3, skipped=4, failed=5
+        ),
+    )
+    def test_scheduler_success_logs_sync_counts(self, mock_sync):
+        with self.assertLogs(
+            "coins.management.commands.runapscheduler", level="INFO"
+        ) as logs:
+            sync_supported_coins_job()
+
+        self.assertTrue(mock_sync.called)
+        self.assertIn(
+            "created=1 updated=2 deactivated=3 skipped=4 failed=5",
+            logs.output[0],
+        )
+
+    @patch(
+        "coins.management.commands.runapscheduler.sync_supported_coins",
         side_effect=CoinGeckoUnavailableError("down"),
     )
-    def test_scheduler_failure_skips_without_crashing(self, mock_supported):
+    def test_scheduler_failure_skips_without_crashing(self, mock_sync):
         Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
         before = Coin.objects.count()
-        # Must not raise: the blocking scheduler (and --run-now) stays alive.
-        save_new_supported_coins()
-        self.assertTrue(mock_supported.called)
+        # Must not raise: the blocking scheduler stays alive.
+        sync_supported_coins_job()
+        self.assertTrue(mock_sync.called)
         self.assertEqual(Coin.objects.count(), before)

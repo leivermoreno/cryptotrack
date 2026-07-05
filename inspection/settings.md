@@ -137,7 +137,8 @@ The default cache is Django's database cache (`crypto_track/settings.py:101`):
 - README correctly requires `python manage.py createcachetable`
   (`README.md:52`).
 - CoinGecko supported-coin list timeout is two hours in seconds:
-  `CACHE_SUPPORTED_COINS_TIMEOUT = 3600 * 2` (`crypto_track/settings.py:108`).
+  `CACHE_SUPPORTED_COINS_TIMEOUT_SECONDS = 3600 * 2`
+  (`crypto_track/settings.py:188`).
 - Market page cache timeout is 60 seconds (`crypto_track/settings.py:109`).
 
 Runtime implications:
@@ -145,11 +146,11 @@ Runtime implications:
 - Missing the `cache` table can break CoinGecko cache access at request time.
 - The cache shares the primary database, so high market-data traffic adds database
   reads/writes rather than using an external cache.
-- The scheduler consumes `CACHE_SUPPORTED_COINS_TIMEOUT` through
-  `coins.services.SUPPORTED_COINS_TIMEOUT` (`coins/services.py:10`), but the
-  scheduler then treats that seconds value as APScheduler minutes
-  (`coins/management/commands/runapscheduler.py:50`). That is an app-level bug
-  caused by unclear setting units.
+- The scheduler consumes `CACHE_SUPPORTED_COINS_TIMEOUT_SECONDS` through
+  `coins.services.SUPPORTED_COINS_TIMEOUT` (`coins/services.py:21`) and now
+  passes an explicitly named seconds interval to APScheduler
+  (`coins/management/commands/runapscheduler.py:17`). This resolves the prior
+  unit bug where the seconds value was treated as minutes.
 
 ## Auth, Sessions, and Security Settings
 
@@ -333,7 +334,7 @@ Fresh setup requires several external pieces before the app can run:
 3. Set `CRYPTO_COINGECKO_KEY` (`README.md:64`).
 4. Run migrations (`README.md:46`).
 5. Create the database cache table (`README.md:52`).
-6. Run `runapscheduler --run-now` to seed local `Coin` rows (`README.md:71`).
+6. Run `sync_supported_coins` to seed local `Coin` rows (`README.md:91`).
 
 Friction points:
 

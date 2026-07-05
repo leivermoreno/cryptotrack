@@ -52,8 +52,9 @@ template tags.
 
 ## Main Workflows
 
-1. Coin sync: `python manage.py runapscheduler --run-now` calls CoinGecko's
-   supported coin list endpoint and bulk-creates missing `Coin` rows.
+1. Coin sync: `python manage.py sync_supported_coins` calls CoinGecko's
+   supported coin list endpoint and bulk-creates missing `Coin` rows; `python
+   manage.py runapscheduler` schedules recurring sync and maintenance jobs.
 2. Browse market: the index page calls CoinGecko `coins/markets`, optionally
    sorts results locally, and marks rows already present in the current user's
    watchlist.

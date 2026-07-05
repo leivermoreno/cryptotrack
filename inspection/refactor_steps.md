@@ -179,20 +179,48 @@ sections keep their full task lists.
    Goal: separate one-shot data sync from the long-running scheduler and fix stale
    catalog behavior.
 
-   - 6.1 Move catalog sync into a reusable domain function.
-   - 6.2 Add a one-shot management command for syncing supported coins.
-   - 6.3 Keep the APScheduler command thin and focused on scheduling.
-   - 6.4 Fix the interval unit bug by using seconds or an explicitly named minutes
-     value.
-   - 6.5 Change sync from create-only to update/upsert existing names and symbols.
-   - 6.6 Decide how to mark coins inactive when they disappear from CoinGecko.
-   - 6.7 Log counts for created, updated, deactivated, skipped, and failed rows.
+   - 6.1 ✅ Move catalog sync into a reusable domain function.
+     Solution: added `coins.sync.sync_supported_coins()` for the one-shot
+     CoinGecko catalog fetch + local persistence path; the scheduler now calls
+     that function and keeps its CoinGecko failure logging/skip behavior.
+   - 6.2 ✅ Add a one-shot management command for syncing supported coins.
+     Solution: added `sync_supported_coins` as a one-shot management command
+     that calls the reusable domain sync once, logs `CoinGeckoError` through the
+     shared failure helper, and exits without starting APScheduler.
+   - 6.3 ✅ Keep the APScheduler command thin and focused on scheduling.
+     Decision/Solution: removed `runapscheduler --run-now`; the one-shot
+     `sync_supported_coins` command is now the seeding path, while
+     `runapscheduler` only registers recurring catalog sync and scheduler
+     cleanup jobs. The scheduled sync job still catches/logs `CoinGeckoError`
+     so API failures do not stop the blocking scheduler.
+   - 6.4 ✅ Fix the interval unit bug by using seconds or an explicitly named
+     minutes value.
+     Decision/Solution: kept the cadence in seconds with
+     `SUPPORTED_COINS_SYNC_INTERVAL_SECONDS = SUPPORTED_COINS_TIMEOUT + 5 * 60`
+     and passed it to APScheduler as `seconds=`, so the recurring sync runs every
+     2 hours and 5 minutes.
+   - 6.5 ✅ Change sync from create-only to update/upsert existing names and symbols.
+     Decision/Solution: sync now loads existing catalog rows by `cg_id`, bulk-creates
+     missing coins, and bulk-updates only existing rows whose `name` or `symbol`
+     changed. Active/inactive status handling was completed in 6.6.
+   - 6.6 ✅ Decide how to mark coins inactive when they disappear from CoinGecko.
+     Decision/Solution: treat CoinGecko's successful active list as the source of
+     truth. Returned coins are created or reactivated with current labels, and
+     active local coins absent from that fetched list are soft-deactivated with
+     `is_active=False`.
+   - 6.7 ✅ Log counts for created, updated, deactivated, skipped, and failed rows.
+     Decision/Solution: `coins.sync.sync_supported_coins()` now returns a small
+     structured result with created, updated, deactivated, skipped, and failed
+     counts. Malformed fetched rows with missing/blank `id`, `name`, or `symbol`
+     are counted as failed and skipped without aborting the run. The one-shot
+     command and the APScheduler job wrapper log successful sync counts, while
+     whole-call `CoinGeckoError` handling stays unchanged.
 
    Verification:
 
    - Scheduler interval matches the documented cadence.
-   - Sync tests cover create, update, unchanged, missing/deactivated, and API
-     failure paths.
+   - Sync tests cover create, update, unchanged, missing/deactivated, malformed
+     rows, count logging, and API failure paths.
 
 7. **Replace ad hoc query, sort, pagination, and URL building**
 

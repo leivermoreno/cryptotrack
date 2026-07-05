@@ -109,24 +109,23 @@ Other service notes:
 
 ## Scheduled Command Workflow
 
-`python manage.py runapscheduler --run-now` is documented as the way to seed the coin catalog before starting the server (`README.md:71`). The command:
+`python manage.py sync_supported_coins` is the one-shot way to seed the coin catalog before starting the server. `python manage.py runapscheduler` is the long-running scheduler process. The scheduler command:
 
 - Creates a blocking APScheduler using Django's time zone (`coins/management/commands/runapscheduler.py:45`).
 - Uses `DjangoJobStore` so scheduler job metadata lives in the database (`coins/management/commands/runapscheduler.py:48`).
-- Registers `save_new_supported_coins()` as an interval job (`coins/management/commands/runapscheduler.py:51`).
+- Registers `sync_supported_coins_job()` as an interval job (`coins/management/commands/runapscheduler.py:51`).
 - Registers weekly cleanup of old `DjangoJobExecution` records (`coins/management/commands/runapscheduler.py:60`).
-- Runs the coin sync immediately when `--run-now` is supplied (`coins/management/commands/runapscheduler.py:70`).
 
-`save_new_supported_coins()` pulls the cached/live supported list, builds `Coin` objects, and `bulk_create(..., ignore_conflicts=True)` (`coins/management/commands/runapscheduler.py:15`). It only creates new rows. It does not update existing names/symbols, does not record last-seen timestamps, and does not deactivate coins that disappear from the active CoinGecko list.
+`coins.sync.sync_supported_coins()` pulls CoinGecko's cached/live active supported list, upserts local `Coin` labels, reactivates returned coins, and soft-deactivates currently active local coins whose `cg_id` is absent from a successful fetch (`coins/sync.py:4`). It returns counts for created, updated, deactivated, skipped, and failed rows; malformed fetched rows with missing/blank `id`, `name`, or `symbol` are counted as failed and do not abort the sync. It does not delete rows, so existing watchlist and portfolio references can continue pointing at historical coin records.
 
-Concrete bug: `SUPPORTED_COINS_TIMEOUT` is configured in seconds as `3600 * 2`, but the scheduler passes it to an APScheduler `interval` as `minutes` (`crypto_track/settings.py:108`, `coins/management/commands/runapscheduler.py:50`). That schedules the job every `7200 + 300 = 7500` minutes, about 5.2 days, instead of "2 hours plus 5 minutes" as intended by the comment/README (`README.md:78`).
+Resolved scheduler interval bug: `SUPPORTED_COINS_TIMEOUT` is configured in seconds as `3600 * 2`, and the scheduler now passes `SUPPORTED_COINS_SYNC_INTERVAL_SECONDS = SUPPORTED_COINS_TIMEOUT + 5 * 60` to APScheduler as `seconds=` (`crypto_track/settings.py:188`, `coins/management/commands/runapscheduler.py:17`). The recurring sync cadence is 7,500 seconds, or 2 hours plus 5 minutes.
 
 Operational risks:
 
 - The scheduler is a blocking long-running process separate from the web server.
 - `max_instances=1` prevents overlap inside one scheduler process, not across accidentally duplicated scheduler processes.
-- Failures in CoinGecko calls are not handled or logged with counts/statuses.
-- The local catalog can become stale because existing rows are never updated or marked inactive automatically.
+- Whole-call CoinGecko failures are logged and skipped; successful syncs log created, updated, deactivated, skipped, and failed row counts.
+- The local catalog is refreshed by upserting returned active rows and soft-deactivating active rows absent from a successful active-list fetch.
 
 ## Views, URLs, Templates, and User Flows
 
@@ -227,14 +226,14 @@ Tests were not executed during this inspection because they are not isolated fro
 
 ## Key Risks, Bugs, and Technical Debt
 
-1. Scheduler interval unit bug: the refresh job likely runs every 5.2 days, not every 2 hours (`coins/management/commands/runapscheduler.py:50`).
+1. Scheduler interval unit bug was fixed in step 6.4: the refresh job now runs every 7,500 seconds, not every 5.2 days (`coins/management/commands/runapscheduler.py:17`).
 2. Live HTTP calls have no timeout, retry, status handling, schema validation, or graceful fallback (`coins/services.py:29`, `coins/services.py:57`).
 3. `CRYPTO_COINGECKO_KEY` is mandatory at settings import time, making unrelated commands fragile in unconfigured environments (`crypto_track/settings.py:157`).
 4. README claims `.env` support, but settings do not load `.env` files (`README.md:69`).
 5. Sorting is page-local, not global, across index/search/watchlist (`coins/services.py:74`).
 6. Search and watchlist paginate ids before market sorting, so sorted pages can be inconsistent across the full result set (`coins/views.py:62`, `coins/views.py:100`).
 7. User-provided `next` is trusted in watchlist toggles, creating an open-redirect risk (`coins/views.py:92`).
-8. The coin sync job only inserts new rows; it never updates names/symbols or deactivates missing coins (`coins/management/commands/runapscheduler.py:21`).
+8. The coin sync job now upserts returned rows, reactivates returned inactive rows, deactivates active rows missing from a successful fetch, and logs result counts (`coins/sync.py:4`, `coins/management/commands/runapscheduler.py:22`).
 9. Admin is incomplete for manual creation/repair and does not expose Watchlist records (`coins/admin.py:6`).
 10. Watchlist ordering is undefined because the model has no timestamp/default ordering (`coins/models.py:15`).
 11. Query-string building is duplicated and manual across templates/tags (`common/templatetags/common_extras.py:90`).
@@ -245,8 +244,8 @@ Tests were not executed during this inspection because they are not isolated fro
 
 - Introduce a `CoinGeckoClient` or service object with injected settings, timeouts, retries/backoff, `raise_for_status`, structured errors, response normalization, and narrow methods such as `list_supported_coins()` and `get_markets(ids=None, order=..., page=...)`.
 - Move scheduler sync logic into a reusable domain service and keep the management command thin. Add a one-shot `sync_coins` command separate from the blocking scheduler path.
-- Fix the scheduler interval by using seconds or converting the timeout to minutes intentionally.
-- Change catalog sync from create-only to upsert/update. Consider `last_seen_at`, `source_status`, and automatic deactivation for coins no longer returned as active.
+- Scheduler interval fixed in step 6.4 by passing an explicitly named seconds value to APScheduler.
+- Catalog sync now upserts/updates, reactivates returned rows, and deactivates coins no longer returned as active. Future options include `last_seen_at` or `source_status` if more auditability is needed.
 - Make model relationships more future-proof: use `settings.AUTH_USER_MODEL`, add `related_name`s, add timestamps to `Watchlist`, and define deterministic ordering.
 - Clarify id naming at the template boundary. Market payload `id` should be exposed as `cg_id` before rendering or referenced explicitly as a CoinGecko id.
 - Validate `next` redirects with allowed-host checks and fall back to a safe named route.
