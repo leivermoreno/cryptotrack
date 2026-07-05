@@ -25,7 +25,20 @@ templates format them via ``format_number`` (which calls ``int(value)`` and so
 rejects strings), and ``Decimal(float)`` in ``portfolio/services.py`` is valid.
 
 Note: ``get_page_count`` returns an int (return a small value such as ``1``).
+
+Service-level test doubles
+--------------------------
+``fake_response``/``fake_session`` drive the *real* ``CoinGeckoClient`` logic
+against canned HTTP without patching ``_request``/``_session`` or ``requests``.
+Inject the fake session via the constructor: ``CoinGeckoClient(session=...)``.
+``fake_response`` returns a real ``requests.models.Response`` so ``.json()`` and
+``.raise_for_status()`` behave faithfully (a bad body raises ``ValueError``; a
+4xx/5xx status raises ``HTTPError``).
 """
+
+import json
+
+import requests
 
 
 def make_market_coin(
@@ -78,3 +91,42 @@ def market_response(*coins):
         else:
             result.append(make_market_coin(cg_id=coin, name=coin.capitalize()))
     return result
+
+
+def fake_response(status=200, payload=None, body=None, headers=None):
+    """Build a real ``requests.Response`` for injecting into a fake session.
+
+    - ``payload``: JSON-serializable value for the body (``.json()`` returns it).
+    - ``body``: raw string body used verbatim (for malformed-JSON cases); takes
+      precedence over ``payload``.
+    - ``status``/``headers``: HTTP status code and response headers.
+    """
+    response = requests.models.Response()
+    response.status_code = status
+    if headers:
+        response.headers.update(headers)
+    if body is not None:
+        content = body
+    elif payload is not None:
+        content = json.dumps(payload)
+    else:
+        content = ""
+    response._content = content.encode("utf-8")
+    return response
+
+
+def fake_session(response=None, error=None):
+    """Return a stand-in session whose ``.get`` returns ``response`` or raises.
+
+    Pass ``error`` (e.g. ``requests.Timeout()``) to simulate a transport failure;
+    otherwise ``.get`` returns ``response``. The returned object records calls, so
+    tests can assert call count and the URL/params/timeout passed.
+    """
+    from unittest import mock
+
+    session = mock.Mock()
+    if error is not None:
+        session.get.side_effect = error
+    else:
+        session.get.return_value = response
+    return session

@@ -1,3 +1,4 @@
+import logging
 import math
 
 from django.contrib.auth.decorators import login_required
@@ -7,6 +8,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from coins.exceptions import CoinGeckoError
 from coins.models import Coin, Watchlist
 from coins.services import (
     get_coin_list_with_market,
@@ -14,7 +16,13 @@ from coins.services import (
 )
 from coins.settings import ALLOWED_SORTS, RESULTS_PAGE, WATCHLIST_COINS_PAGE
 from common.decorators.views import validate_common_params
-from common.utils import get_common_params, get_safe_redirect_url
+from common.utils import (
+    get_common_params,
+    get_safe_redirect_url,
+    handle_market_unavailable,
+)
+
+logger = logging.getLogger(__name__)
 
 validate_common_params = validate_common_params(ALLOWED_SORTS)
 get_common_params = get_common_params(default_sort="rank", default_direction="asc")
@@ -22,29 +30,36 @@ get_common_params = get_common_params(default_sort="rank", default_direction="as
 
 @validate_common_params
 def render_index(request):
-    # manual pagination and redirect because data comes from external API
-    page_count = get_page_count()
-    page, sort, direction = get_common_params(request, page_count=page_count)
-
-    coin_list = get_coin_list_with_market(page, sort, direction)
     user_watchlist = (
         list(Watchlist.get_coin_ids_for_user(request.user.id))
         if request.user.is_authenticated
         else []
     )
 
-    return render(
-        request,
-        "coins/index.html",
-        context={
+    try:
+        # manual pagination and redirect because data comes from external API
+        page_count = get_page_count()
+        page, sort, direction = get_common_params(request, page_count=page_count)
+        coin_list = get_coin_list_with_market(page, sort, direction)
+        context = {
             "page_number": page,
             "page_count": page_count,
             "coin_list": coin_list,
             "sort": sort,
             "direction": direction,
             "user_watchlist": user_watchlist,
-        },
-    )
+        }
+    except CoinGeckoError as exc:
+        context = {
+            "page_number": 1,
+            "page_count": 0,
+            "sort": "rank",
+            "direction": "asc",
+            "user_watchlist": user_watchlist,
+            **handle_market_unavailable(logger, exc),
+        }
+
+    return render(request, "coins/index.html", context)
 
 
 @validate_common_params
@@ -60,20 +75,22 @@ def render_search(request):
     page_count = math.ceil(len(cg_id_list) / RESULTS_PAGE)
     page, sort, direction = get_common_params(request, page_count=page_count)
     page_obj = Paginator(cg_id_list, RESULTS_PAGE).page(page)
-    coin_list = get_coin_list_with_market(1, sort, direction, ids=page_obj.object_list)
     user_watchlist = list(Watchlist.get_coin_ids_for_user(request.user.id))
-    return render(
-        request,
-        "coins/search.html",
-        context={
-            "coin_list": coin_list,
-            "search_query": search_query,
-            "page_obj": page_obj,
-            "sort": sort,
-            "direction": direction,
-            "user_watchlist": user_watchlist,
-        },
-    )
+    context = {
+        "coin_list": [],
+        "search_query": search_query,
+        "page_obj": page_obj,
+        "sort": sort,
+        "direction": direction,
+        "user_watchlist": user_watchlist,
+    }
+    try:
+        context["coin_list"] = get_coin_list_with_market(
+            1, sort, direction, ids=page_obj.object_list
+        )
+    except CoinGeckoError as exc:
+        context.update(handle_market_unavailable(logger, exc))
+    return render(request, "coins/search.html", context)
 
 
 @login_required
@@ -103,17 +120,18 @@ def render_watchlist(request):
     page, sort, direction = get_common_params(request, page_count=paginator.num_pages)
     page_obj = paginator.page(page)
     watchlist = page_obj.object_list
-    coin_list = []
+    context = {
+        "coin_list": [],
+        "sort": sort,
+        "direction": direction,
+        "page_obj": page_obj,
+    }
     if watchlist:
-        coin_list = get_coin_list_with_market(1, sort, direction, ids=watchlist)
+        try:
+            context["coin_list"] = get_coin_list_with_market(
+                1, sort, direction, ids=watchlist
+            )
+        except CoinGeckoError as exc:
+            context.update(handle_market_unavailable(logger, exc))
 
-    return render(
-        request,
-        "coins/watchlist.html",
-        context={
-            "coin_list": coin_list,
-            "sort": sort,
-            "direction": direction,
-            "page_obj": page_obj,
-        },
-    )
+    return render(request, "coins/watchlist.html", context)

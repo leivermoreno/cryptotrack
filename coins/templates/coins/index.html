@@ -6,16 +6,20 @@
     <div class="container">
         <h1 class="my-5">Cryptocurrency prices by market capitalization</h1>
 
-        {% include "coins/partials/coins_table.html" %}
+        {% if market_unavailable %}
+            <div class="alert alert-info">Market data is temporarily unavailable. Please try again shortly.</div>
+        {% else %}
+            {% include "coins/partials/coins_table.html" %}
 
-        <div class="pagination py-3 d-flex justify-content-end">
-            {% if page_number > 1 %}
-                <a href="{% url "coins:index" %}?page={{ page_number|add:'-1' }}" class='text-decoration-none me-3'>prev</a>
-            {% endif %}
-            {{ page_number }}
-            {% if page_number < page_count %}
-                <a href="{% url "coins:index" %}?page={{ page_number|add:'1' }}" class='text-decoration-none ms-3'> next</a>
-            {% endif %}
-        </div>
+            <div class="pagination py-3 d-flex justify-content-end">
+                {% if page_number > 1 %}
+                    <a href="{% url "coins:index" %}?page={{ page_number|add:'-1' }}" class='text-decoration-none me-3'>prev</a>
+                {% endif %}
+                {{ page_number }}
+                {% if page_number < page_count %}
+                    <a href="{% url "coins:index" %}?page={{ page_number|add:'1' }}" class='text-decoration-none ms-3'> next</a>
+                {% endif %}
+            </div>
+        {% endif %}
     </div>
 {% endblock content %}

@@ -16,7 +16,7 @@ def get_portfolio_overview_data(user, cg_to_db_id_map):
         amount = sum([p["amount"] for p in positions])
         total_invested = sum([p["amount"] * p["price"] for p in positions])
         avg_buy_price = total_invested / amount if amount > 0 else 0
-        current_price = Decimal(coin["current_price"])
+        current_price = Decimal(str(coin["current_price"]))
         upl = amount * current_price - total_invested
         upl_percentage = (upl / total_invested * 100) if total_invested > 0 else 0
 

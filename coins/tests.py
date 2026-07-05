@@ -3,12 +3,22 @@ from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.db import IntegrityError
-from django.test import Client, TestCase
+from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 
+from coins.exceptions import (
+    CoinGeckoResponseError,
+    CoinGeckoUnavailableError,
+)
+from coins.management.commands.runapscheduler import save_new_supported_coins
 from common.test_utils import make_market_coin, market_response
 
 from .models import Coin, Watchlist
+
+# Single user-facing copy for a CoinGecko whole-call failure (5.6).
+MARKET_UNAVAILABLE_COPY = (
+    "Market data is temporarily unavailable. Please try again shortly."
+)
 
 
 class CoinModelTest(TestCase):
@@ -367,3 +377,79 @@ class OpenRedirectTest(TestCase):
                     expected_url=reverse("coins:index"),
                     fetch_redirect_response=False,
                 )
+
+
+# ---------------------------------------------------------------------------
+# 5.6 — graceful fallbacks when the CoinGecko client raises CoinGeckoError.
+# Each web surface should render its normal shell with an in-place banner and
+# an empty table (HTTP 200, no 500); the scheduler should skip and not crash.
+# Patches target the 5.5 delegator seam (where the names are looked up).
+# ---------------------------------------------------------------------------
+class CoinGeckoFallbackTest(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(username="testuser", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+
+    @patch("coins.views.get_page_count", side_effect=CoinGeckoUnavailableError("down"))
+    def test_index_page_count_failure_renders_banner(self, mock_page_count):
+        response = self.client.get(reverse("coins:index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "coins/index.html")
+        self.assertTrue(response.context["market_unavailable"])
+        self.assertEqual(response.context["coin_list"], [])
+        self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+
+    @patch("coins.views.get_page_count", return_value=1)
+    @patch(
+        "coins.views.get_coin_list_with_market",
+        side_effect=CoinGeckoResponseError("malformed"),
+    )
+    def test_index_market_failure_renders_banner(self, mock_market, mock_page_count):
+        response = self.client.get(reverse("coins:index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["market_unavailable"])
+        self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+
+    @patch(
+        "coins.views.get_coin_list_with_market",
+        side_effect=CoinGeckoUnavailableError("down"),
+    )
+    def test_search_failure_renders_banner(self, mock_market):
+        response = self.client.get(reverse("coins:search") + "?search=Bitcoin")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "coins/search.html")
+        self.assertTrue(response.context["market_unavailable"])
+        self.assertEqual(response.context["coin_list"], [])
+        self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+
+    @patch(
+        "coins.views.get_coin_list_with_market",
+        side_effect=CoinGeckoUnavailableError("down"),
+    )
+    def test_watchlist_failure_renders_banner(self, mock_market):
+        Watchlist.objects.create(user=self.user, coin=self.coin)
+        self.client.login(username="testuser", password="pass")
+        response = self.client.get(reverse("coins:watchlist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "coins/watchlist.html")
+        self.assertTrue(response.context["market_unavailable"])
+        self.assertEqual(response.context["coin_list"], [])
+        self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+
+
+# ``save_new_supported_coins`` is wrapped in ``@util.close_old_connections``,
+# which closes the DB connection on exit — that would corrupt a ``TestCase``'s
+# wrapping transaction, so this lives in a ``TransactionTestCase``.
+class SchedulerFallbackTest(TransactionTestCase):
+    @patch(
+        "coins.management.commands.runapscheduler.get_supported_coin_list",
+        side_effect=CoinGeckoUnavailableError("down"),
+    )
+    def test_scheduler_failure_skips_without_crashing(self, mock_supported):
+        Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        before = Coin.objects.count()
+        # Must not raise: the blocking scheduler (and --run-now) stays alive.
+        save_new_supported_coins()
+        self.assertTrue(mock_supported.called)
+        self.assertEqual(Coin.objects.count(), before)

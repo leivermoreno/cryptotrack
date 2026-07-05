@@ -265,16 +265,144 @@ marked ✅.
    Goal: keep external HTTP behavior out of views, scheduler logic, and portfolio
    calculations.
 
-   - 5.1 Replace module-level request helpers with a `CoinGeckoClient` or equivalent
+   - 5.1 ✅ Replace module-level request helpers with a `CoinGeckoClient` or equivalent
      service object.
-   - 5.2 Add explicit request timeouts, status handling, structured errors, and
+     Decision: added a `CoinGeckoClient` class in `coins/services.py` holding
+     api_key/base_url/timeouts plus an instance-level `threading.local()` session,
+     with all HTTP/session/sort/cache logic moved onto it as `list_supported_coins`,
+     `get_coin_count`, `get_page_count`, `get_markets`, and private `_session`/`_sort`.
+     A module-level singleton `_default_client` backs the existing module functions,
+     now thin one-line delegators, and the `SUPPORTED_COINS_TIMEOUT`/`PAGE_DATA_TIMEOUT`
+     constants stay — so consumers (`coins/views.py`, `portfolio/services.py`,
+     `runapscheduler.py`) and the function-level test seam are untouched. Behavior is
+     verbatim (same cache keys/timeouts, no-cache-when-ids, Python-side sort, double
+     `res.json()`); timeouts/status/errors (5.2), Decimal (5.3), cache policy (5.4),
+     and test injection (5.5) build on this seam later.
+   - 5.2 ✅ Add explicit request timeouts, status handling, structured errors, and
      response normalization.
-   - 5.3 Convert numeric API values with `Decimal(str(value))` where financial
+     Decision: added `(3.05, 10.0)` connect/read timeouts as hardcoded module
+     constants (`CONNECT_TIMEOUT`/`READ_TIMEOUT`), injectable per-instance via the
+     client constructor. New `coins/exceptions.py` holds the hierarchy: base
+     `CoinGeckoError` → `CoinGeckoUnavailableError` (→ `CoinGeckoServerError`),
+     `CoinGeckoRateLimitError` (carries `retry_after`), `CoinGeckoAuthError`,
+     `CoinGeckoResponseError`. A private `_request` routes both `.get()` calls
+     through one place mapping transport errors → Unavailable, 429 → RateLimit
+     (captures `Retry-After`), 401/403 → Auth, 5xx → Server, `raise_for_status`
+     catch-all → Response, malformed JSON → Response — always `raise ... from exc`
+     so no `requests.*` escapes. Normalization: single JSON decode (removes the
+     double `res.json()` bug) with container-shape validation BEFORE any
+     `cache.set` — `list_supported_coins` requires a non-empty `list[dict]` (empty
+     or non-list → Response, never cached), `get_markets` requires a `list` (empty
+     is legitimate for unknown ids; non-list → Response, protects `_sort`). Added a
+     minimal urllib3 `Retry(total=2, backoff_factor=0.5, status_forcelist=[429,500,
+     502,503,504], allowed_methods=["GET"], respect_retry_after_header=True)` mounted
+     on the session (no new dependency). `coins.W001` kept unchanged as a config-time
+     pre-flight nudge. Client RAISES; consumers stay unguarded (catching is 5.6),
+     no Decimal/field coercion (5.3). Suite stays green: 131 tests, 21 expected
+     failures, no XPASS flips.
+   - 5.3 ✅ Convert numeric API values with `Decimal(str(value))` where financial
      calculations need decimals.
-   - 5.4 Define cache behavior for supported coins, market pages, and id-specific
+     Decision: Option B (consumer-side). Converted only `current_price` — the sole
+     market field a financial calculation consumes — at `portfolio/services.py`
+     via `Decimal(str(coin["current_price"]))`, replacing `Decimal(coin["current_price"])`
+     which fed a binary `float` straight into `Decimal` and captured float noise.
+     `str()` first yields the shortest round-trippable decimal the value represents.
+     All other numeric market fields (`ath`, `market_cap`, `total_volume`, the two
+     `price_change_percentage_*`) are display-only, flow only through the format
+     filters, and are left as floats: display-field Decimalization is deferred to
+     step 8 (which rewrites formatting around `Decimal`) and key normalization to
+     12.4. No `None`/`or 0` fallback added — missing-price semantics belong to
+     step 11.4/11.5. Client, cache, and the `common/test_utils.py` float factory
+     untouched (the factory's floats survive `Decimal(str(...))` unchanged).
+     Suite stays green: 131 tests pass, 21 expected failures, no XPASS flips.
+   - 5.4 ✅ Define cache behavior for supported coins, market pages, and id-specific
      market data.
-   - 5.5 Make tests inject fake market responses without patching deep internals.
-   - 5.6 Add user-facing graceful fallbacks for CoinGecko downtime or malformed data.
+     Decision: made the existing policy explicit and correct without a strategy
+     overhaul. Replaced the `has_key`+`get` double-lookup in `list_supported_coins`
+     and `get_markets` with a single `cache.get(key, _MISS)` against a distinct
+     module-level `_MISS = object()` sentinel (not `None`, so a legitimately cached
+     empty market page stays distinguishable from a miss; also closes the TOCTOU
+     window where an entry expiring between `has_key` and `get` returned `None`).
+     Id-specific market data (search/watchlist/portfolio) stays UNCACHED — the id
+     sets are arbitrary, already-paginated user input with unbounded key
+     cardinality against an unevicted DB cache table; `get_markets` now branches so
+     the "ids given" path is the explicit no-cache branch (empty ids still `[]`),
+     with the shared HTTP+list-shape-validation extracted to `_fetch_markets`.
+     Both keys carry a `CACHE_VERSION = "v1"` prefix (`v1:supported_coin_list`,
+     `v1:coin_list_page_{page}`) so a payload-shape change can invalidate stale
+     pre-deploy pickles by bumping it; the market-page key stays page-only
+     (documented: CoinGecko is always queried `market_cap_desc`/USD and
+     sort/direction apply post-cache, so they are not part of the key). `_sort` is
+     now non-mutating (`sorted(...)` instead of in-place `list.sort`, keeping the
+     `rank`/`asc` early-return passing the original through) so a cached value is
+     never mutated in place — latent-safe for backends that return shared refs;
+     harmless-but-correct for `DatabaseCache` which unpickles a fresh copy per get.
+     Timeouts unchanged (2h/60s, already unit-named post-3.6) and documented; the
+     scheduler interval-unit bug is left to step 6. Added a class docstring in
+     `coins/services.py` stating the three-part cache contract and a matching note
+     in the AGENTS.md caching section. Public delegator names and the two timeout
+     constants (the 5.1 seam) are preserved, so test patch targets are unchanged.
+     Suite stays green: 131 tests pass, 21 expected failures, no XPASS flips.
+   - 5.5 ✅ Make tests inject fake market responses without patching deep internals.
+     Decision: Option C — a constructor `session=` dependency-injection seam for the
+     new service tests, with the existing public delegator-patching seam
+     (`coins.views.get_coin_list_with_market` etc.) kept unchanged for view/portfolio
+     tests. `CoinGeckoClient.__init__` gained a `session=None` param; `_session()`
+     returns the override when set, else the existing thread-local branch — default
+     `None` keeps production behavior byte-identical, so delegators, timeout
+     constants, and public names are untouched. No new dependency: canned responses
+     are built with stdlib via two helpers added to `common/test_utils.py` —
+     `fake_response(status, payload, body, headers)` returns a REAL
+     `requests.models.Response` (faithful `.json()`/`.raise_for_status()`) and
+     `fake_session(response, error)` returns a Mock whose `.get` returns the
+     response or raises, both reusing `make_market_coin`/`market_response`. New
+     `coins/test_services.py::CoinGeckoClientTest` drives the client through PUBLIC
+     methods only, covering success (markets + supported list, asserting
+     URL/params/timeout), timeout/connection→Unavailable, 429→RateLimit (incl.
+     `retry_after`), 401/403→Auth, 500/503→Server, 404→Response, malformed
+     JSON→Response, empty/non-list shape→Response, empty ids→`[]` with `.get` not
+     called, cache policy (page cached once, supported once, id-specific NOT cached
+     → two calls), and `_sort` tolerating a coin missing the sort key. Cache tests
+     use a class-level `@override_settings` LocMemCache override + `cache.clear`
+     cleanup (the production `DatabaseCache` table is not created by the test
+     runner). Existing 131 tests left unmigrated. The urllib3 Retry adapter is
+     intentionally NOT unit-covered — injection bypasses it and the Verification
+     block does not require retry coverage. Suite: 148 tests pass (+17), 21 expected
+     failures unchanged, no unexpected failures, no XPASS flips.
+   - 5.6 ✅ Add user-facing graceful fallbacks for CoinGecko downtime or malformed data.
+     Decision: per-view `try/except CoinGeckoError` around the market call(s) in
+     `render_index` (spanning `get_page_count()` too), `render_search`,
+     `render_watchlist`, and `portfolio_overview` — no middleware, no generic-page
+     decorator. The shared except-body is factored into `common/utils.py`:
+     `handle_market_unavailable(logger, exc)` logs (via `log_coingecko_failure`) and
+     returns `{"coin_list": [], "market_unavailable": True}` to merge into the
+     context; the scheduler reuses `log_coingecko_failure` directly. Delivery is a
+     single `market_unavailable` context flag (NOT Django `messages`), rendering an
+     in-place banner with one copy — "Market data is temporarily unavailable. Please
+     try again shortly." — at HTTP 200 (owner-chosen; the page shell/navbar/search/
+     auth stay usable). Templates updated: `index.html` guards the previously
+     unconditional `coins_table.html` include + pagination; `search.html`/
+     `watchlist.html` gain an `{% elif market_unavailable %}` branch distinct from
+     their genuine-empty states; `overview.html` hides both the summary tiles and the
+     P/L table behind the flag (keeping the "See all transactions" link). Portfolio
+     shows the banner only and does NOT render holdings-without-prices — that partial
+     path is step 11.4. Tiered logging at every catch site: Unavailable/Server/
+     RateLimit → `logger.warning(..., exc_info=...)`, Auth/Response → `logger.error`.
+     Scheduler `save_new_supported_coins` catches, logs, and returns (skips
+     `bulk_create`) so neither the interval job nor `--run-now` crashes the
+     `BlockingScheduler`. `coins.W001` kept unchanged (complementary deploy-time
+     pre-flight vs. request-time `CoinGeckoAuthError`). AGENTS.md "CoinGecko
+     integration & caching" corrected: the false "No timeouts, status checks, or
+     retries" line now describes timeouts + bounded urllib3 retry + structured
+     `CoinGeckoError` caught by consumers, and `_sort_coin_list` → `_sort` (static
+     method on `CoinGeckoClient`). New tests patch the 5.5 delegator seam with
+     `side_effect=`: index page-count-fails and market-fails (the latter
+     `CoinGeckoResponseError`, covering "malformed data"), search-fails,
+     watchlist-fails, portfolio overview-fails (asserts no P/L metrics), and
+     scheduler-fails (in a `TransactionTestCase` because `@close_old_connections`
+     closes the DB connection; asserts no raise + `Coin` count unchanged) — all
+     asserting 200 + banner copy + no 500. Suite: 154 tests pass (+6), 21 expected
+     failures unchanged, no unexpected failures, no XPASS flips.
 
    > Note: Step 1.2 made `COINGECKO_KEY` default to empty instead of raising at
    > settings import. As a provisional measure, a Django system check
@@ -286,9 +414,29 @@ marked ✅.
 
    Verification:
 
-   - Service tests cover success, timeout, non-2xx, malformed JSON, missing
-     fields, empty ids, and cache hits.
-   - Views do not make real network calls during tests.
+   - ✅ Service tests cover success, timeout, non-2xx (429/401/403/5xx/404),
+     malformed JSON, missing/empty/non-list shape, empty ids, and cache hits
+     (`coins/test_services.py`, 17 tests via the injected-`session` seam).
+   - ✅ Views do not make real network calls during tests: all market data is
+     mocked at the delegator seam documented in `common/test_utils.py`; the whole
+     suite runs offline.
+   - ✅ CoinGecko downtime/malformed data degrades gracefully instead of 500ing:
+     view/scheduler tests patch the seam with `side_effect=CoinGeckoError` and
+     assert a 200 in-place banner (and a non-crashing scheduler).
+
+   Result: section 5 complete. All CoinGecko HTTP now lives behind a
+   `CoinGeckoClient` boundary (`coins/services.py`) with explicit (connect, read)
+   timeouts, a bounded urllib3 retry, status→structured-error mapping
+   (`coins/exceptions.py`), single-decode response normalization, versioned/
+   sentinel-based caching (id-specific requests deliberately uncached),
+   consumer-side `Decimal(str(...))` for the one financially-computed field, a
+   constructor `session=` test-injection seam, and user-facing "market data
+   temporarily unavailable" fallbacks (HTTP 200, in-place banner) across the
+   market/search/watchlist/portfolio views plus a catch-and-log scheduler. The
+   `coins.W001` pre-flight key check was reviewed per the note below and
+   **kept** — it complements the runtime `CoinGeckoAuthError` (config-time vs.
+   request-time signals). Suite: 154 tests, 21 expected failures, green
+   throughout; each subtask verified in isolation before the next began.
 
 6. **Refactor coin catalog sync and scheduler responsibilities**
 

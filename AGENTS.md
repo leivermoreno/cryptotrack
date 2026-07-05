@@ -63,9 +63,9 @@ Server-rendered Django 5.2 app (Bootstrap 5 + crispy-forms, no JS framework). Fo
 - **`common`** — shared request/presentation helpers used across apps: param validation decorator, param-reading helper, pagination partial, and number/sort template tags.
 
 ### CoinGecko integration & caching (`coins/services.py`)
-- Uses a thread-local `requests.Session` with the API key header. No timeouts, status checks, or retries — calls can raise or return unexpected shapes.
-- Caching is **DB-backed** (`DatabaseCache`, the `cache` table). The supported coin list is cached for 2h; per-page market data for 60s (`CACHE_*_TIMEOUT` in `settings.py`).
-- `get_coin_list_with_market(page, sort, direction, ids=None)` is the central market-data call. When `ids` is passed (search/watchlist/portfolio), results are **not cached** (to avoid cache explosion) and sorting is done in Python via `_sort_coin_list`.
+- Uses a thread-local `requests.Session` with the API key header. Requests carry explicit (connect, read) timeouts and a bounded urllib3 retry policy on idempotent GETs. Every transport/status/decode failure is wrapped as a structured `CoinGeckoError` (see `coins/exceptions.py`); consumers (the coins views, `portfolio/services.py` via the overview view, and the scheduler) catch it and degrade gracefully — an in-place "market data unavailable" banner in the web views (HTTP 200), and a logged skip in the scheduler.
+- Caching is **DB-backed** (`DatabaseCache`, the `cache` table). The supported coin list is cached for 2h; per-page market data for 60s (`CACHE_*_TIMEOUT` in `settings.py`). Cache reads use a single `cache.get(key, _MISS)` sentinel lookup (no `has_key`). Keys carry a `v1:` version prefix (`CACHE_VERSION` in `coins/services.py`) so a payload-shape change can be invalidated across deploys by bumping it. The market-page key is **page-only** (`v1:coin_list_page_{page}`): CoinGecko is always queried `market_cap_desc`/USD and sort/direction are applied *after* the cache read, so they are intentionally not part of the key.
+- `get_coin_list_with_market(page, sort, direction, ids=None)` is the central market-data call. When `ids` is passed (search/watchlist/portfolio), results are **not cached** (to avoid cache explosion) and sorting is done in Python via `_sort` (a static method on `CoinGeckoClient`).
 
 ### Portfolio math (`portfolio/services.py`)
 - `build_holdings` reconstructs open lots per coin using **FIFO** (a `deque` per coin; sells consume oldest lots first).

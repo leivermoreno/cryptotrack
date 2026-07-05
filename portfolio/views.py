@@ -1,12 +1,20 @@
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
+from coins.exceptions import CoinGeckoError
 from coins.models import Coin
 from common.decorators.views import validate_common_params
-from common.utils import add_direction_sign, get_common_params, get_safe_redirect_url
+from common.utils import (
+    add_direction_sign,
+    get_common_params,
+    get_safe_redirect_url,
+    handle_market_unavailable,
+)
 from portfolio.forms import PortfolioTransactionForm
 from portfolio.models import PortfolioTransaction
 from portfolio.services import get_portfolio_overview_data
@@ -17,6 +25,8 @@ from portfolio.settings import (
     OVERVIEW_ALLOWED_SORTS,
     TRANSACTIONS_PER_PAGE,
 )
+
+logger = logging.getLogger(__name__)
 
 validate_common_params_defaults = validate_common_params(ALLOWED_SORTS)
 get_common_params_defaults = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
@@ -32,28 +42,39 @@ def portfolio_overview(request):
         item["coin__cg_id"]: item["coin_id"] for item in positive_balance_coin_ids
     }
 
-    portfolio_overview_data = get_portfolio_overview_data(
-        user=request.user, cg_to_db_id_map=cg_to_db_id_map
-    )
-    coin_list = portfolio_overview_data["coin_list"]
-    portfolio_metrics = portfolio_overview_data["portfolio_metrics"]
     sort = request.GET.get("sort", "allocation_percentage")
     direction = request.GET.get("direction", "desc")
-    coin_list.sort(key=lambda x: x[sort], reverse=(direction == "desc"))
+    context = {
+        "sort": sort,
+        "direction": direction,
+        "coin_list": [],
+    }
 
-    return render(
-        request,
-        "portfolio/overview.html",
-        {
-            "sort": sort,
-            "direction": direction,
-            "coin_list": coin_list,
-            "total_invested": portfolio_metrics["total_invested"],
-            "portfolio_value": portfolio_metrics["portfolio_value"],
-            "portfolio_upl": portfolio_metrics["portfolio_upl"],
-            "portfolio_upl_percentage": portfolio_metrics["portfolio_upl_percentage"],
-        },
-    )
+    try:
+        portfolio_overview_data = get_portfolio_overview_data(
+            user=request.user, cg_to_db_id_map=cg_to_db_id_map
+        )
+        coin_list = portfolio_overview_data["coin_list"]
+        portfolio_metrics = portfolio_overview_data["portfolio_metrics"]
+        coin_list.sort(key=lambda x: x[sort], reverse=(direction == "desc"))
+        context.update(
+            {
+                "coin_list": coin_list,
+                "total_invested": portfolio_metrics["total_invested"],
+                "portfolio_value": portfolio_metrics["portfolio_value"],
+                "portfolio_upl": portfolio_metrics["portfolio_upl"],
+                "portfolio_upl_percentage": portfolio_metrics[
+                    "portfolio_upl_percentage"
+                ],
+            }
+        )
+    except CoinGeckoError as exc:
+        # Whole market call failed: show the banner in place of both the summary
+        # tiles and the P/L table. Rendering holdings without live prices is
+        # step 11.4 territory, not this subtask.
+        context.update(handle_market_unavailable(logger, exc))
+
+    return render(request, "portfolio/overview.html", context)
 
 
 @login_required

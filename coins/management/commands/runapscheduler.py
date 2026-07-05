@@ -8,13 +8,23 @@ from django_apscheduler import util
 from django_apscheduler.jobstores import DjangoJobStore
 from django_apscheduler.models import DjangoJobExecution
 
+from coins.exceptions import CoinGeckoError
 from coins.models import Coin
 from coins.services import SUPPORTED_COINS_TIMEOUT, get_supported_coin_list
+from common.utils import log_coingecko_failure
+
+logger = logging.getLogger(__name__)
 
 
 @util.close_old_connections
 def save_new_supported_coins():
-    coin_list = get_supported_coin_list()
+    try:
+        coin_list = get_supported_coin_list()
+    except CoinGeckoError as exc:
+        # Never crash the blocking scheduler (or --run-now) on an API failure;
+        # skip this run and try again on the next interval.
+        log_coingecko_failure(logger, exc)
+        return
     coin_objs = [
         Coin(cg_id=coin["id"], name=coin["name"], symbol=coin["symbol"])
         for coin in coin_list

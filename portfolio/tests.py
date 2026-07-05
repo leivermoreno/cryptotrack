@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from coins.exceptions import CoinGeckoUnavailableError
 from coins.models import Coin
 from common.test_utils import make_market_coin, market_response
 from portfolio.services import build_holdings, get_portfolio_overview_data
@@ -135,6 +136,26 @@ class PortfolioViewsTest(TestCase):
         # should be sorted in ascending order by allocation_percentage
         allocs = [c["allocation_percentage"] for c in coin_list]
         self.assertEqual(allocs, sorted(allocs))
+
+    @patch(
+        "portfolio.services.get_coin_list_with_market",
+        side_effect=CoinGeckoUnavailableError("down"),
+    )
+    def test_portfolio_overview_market_failure_renders_banner(self, mock_market):
+        # 5.6: whole market call fails -> banner in place of summary tiles AND
+        # the P/L table, HTTP 200, no 500. Holdings-without-prices is step 11.4.
+        self.client.login(username="testuser", password="pass")
+        response = self.client.get(reverse("portfolio:overview"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "portfolio/overview.html")
+        self.assertTrue(response.context["market_unavailable"])
+        self.assertEqual(response.context["coin_list"], [])
+        self.assertContains(
+            response,
+            "Market data is temporarily unavailable. Please try again shortly.",
+        )
+        # No P/L summary metric keys were populated.
+        self.assertNotIn("portfolio_value", response.context)
 
 
 # ---------------------------------------------------------------------------
