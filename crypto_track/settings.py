@@ -57,6 +57,9 @@ CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise serves static files directly from the app process (compressed +
+    # hashed). Must sit immediately after SecurityMiddleware.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -151,11 +154,28 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
-
+#
+# Strategy: this app has a small, hand-maintained set of static assets (the
+# project's `style.css` plus Django admin's bundled files). We serve them from
+# the app process itself via WhiteNoise rather than a separate CDN/reverse proxy.
+# - Dev: `runserver` serves from STATICFILES_DIRS (and app dirs) via the
+#   staticfiles finders; no collectstatic needed.
+# - Prod: run `manage.py collectstatic` into STATIC_ROOT; WhiteNoise serves those
+#   files, compressed and content-hashed for far-future caching.
 STATIC_URL = "static/"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

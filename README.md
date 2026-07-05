@@ -107,6 +107,23 @@ step 2 of Installation for the role/database setup, including the `CONNECT`
 privilege on the `postgres` database that Django needs to create the temporary
 `test_*` database.
 
+## Static Files
+
+The app has a small, hand-maintained set of static assets — the project's
+`static/style.css` plus Django admin's bundled files — so it serves them from the
+web process itself using [WhiteNoise](https://whitenoise.readthedocs.io/) rather
+than a separate CDN or reverse proxy.
+
+- **Development:** `runserver` serves assets directly from `STATICFILES_DIRS` via
+  the staticfiles finders. No extra step is needed.
+- **Production:** run `python manage.py collectstatic` to gather assets into
+  `STATIC_ROOT` (`staticfiles/`, git-ignored). WhiteNoise then serves them
+  compressed and content-hashed (`CompressedManifestStaticFilesStorage`) with
+  far-future, immutable cache headers.
+
+Because the manifest storage returns unhashed URLs while `DEBUG` is on, you do
+**not** need to run `collectstatic` for local development.
+
 ## Running Tests
 
 Tests run against a temporary `test_*` PostgreSQL database that Django creates
