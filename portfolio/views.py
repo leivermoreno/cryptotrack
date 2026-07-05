@@ -6,7 +6,7 @@ from django.views.decorators.http import require_POST
 
 from coins.models import Coin
 from common.decorators.views import validate_common_params
-from common.utils import add_direction_sign, get_common_params
+from common.utils import add_direction_sign, get_common_params, get_safe_redirect_url
 from portfolio.forms import PortfolioTransactionForm
 from portfolio.models import PortfolioTransaction
 from portfolio.services import get_portfolio_overview_data
@@ -152,9 +152,9 @@ def delete_portfolio_transaction(request, coin_id, transaction_id):
             )
         else:
             transaction.delete()
-        next_ = request.POST.get("next")
-        if next_:
-            return redirect(next_)
+        next_url = get_safe_redirect_url(request, request.POST.get("next"))
+        if next_url:
+            return redirect(next_url)
     except (Coin.DoesNotExist, PortfolioTransaction.DoesNotExist):
         pass
     return redirect("portfolio:add_transaction", coin_id=coin_id)

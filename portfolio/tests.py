@@ -495,11 +495,32 @@ class DeletePathTest(TestCase):
         self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
         self.client.login(username="del", password="pass")
 
+    def test_all_transactions_delete_next_preserves_normalized_query_state(self):
+        for index in range(11):
+            PortfolioTransaction.objects.create(
+                user=self.user,
+                coin=self.coin,
+                type="buy",
+                amount=1,
+                price=10000 + index,
+            )
+
+        query = "?page=2&sort=price&direction=asc&ignored=1"
+        response = self.client.get(reverse("portfolio:all_transactions") + query)
+
+        expected_next = (
+            reverse("portfolio:all_transactions") + "?page=2&sort=price&direction=asc"
+        )
+        self.assertContains(response, f'value="{expected_next}"')
+        self.assertNotContains(response, "ignored=1")
+
     def test_valid_local_next_is_honored(self):
         tx = PortfolioTransaction.objects.create(
             user=self.user, coin=self.coin, type="buy", amount=2, price=10000
         )
-        target = reverse("portfolio:all_transactions")
+        target = (
+            reverse("portfolio:all_transactions") + "?page=2&sort=price&direction=asc"
+        )
         url = reverse("portfolio:delete_transaction", args=[self.coin.id, tx.id])
         response = self.client.post(url, {"next": target})
         self.assertEqual(response.status_code, 302)
@@ -525,14 +546,26 @@ class DeletePathTest(TestCase):
         messages = [str(m) for m in get_messages(response.wsgi_request)]
         self.assertTrue(any("buy" in m.lower() for m in messages))
 
-    @unittest.expectedFailure
     def test_delete_unsafe_next_is_rejected(self):
-        # BUG (inspection/portfolio.md): delete_portfolio_transaction trusts POST
-        # `next` directly (open redirect). Step 4.3 should validate it and fall
-        # back to a safe local route.
-        tx = PortfolioTransaction.objects.create(
-            user=self.user, coin=self.coin, type="buy", amount=2, price=10000
-        )
-        url = reverse("portfolio:delete_transaction", args=[self.coin.id, tx.id])
-        response = self.client.post(url, {"next": "https://evil.example/"})
-        self.assertTrue(url_has_allowed_host_and_scheme(response.url, {"testserver"}))
+        unsafe_values = [
+            "https://evil.example/",
+            "//evil.example/",
+            r"https:\evil.example\phishing",
+            r"\\evil.example\phishing",
+        ]
+        for unsafe in unsafe_values:
+            with self.subTest(next=unsafe):
+                tx = PortfolioTransaction.objects.create(
+                    user=self.user, coin=self.coin, type="buy", amount=2, price=10000
+                )
+                url = reverse(
+                    "portfolio:delete_transaction", args=[self.coin.id, tx.id]
+                )
+                response = self.client.post(url, {"next": unsafe})
+                self.assertRedirects(
+                    response,
+                    expected_url=reverse(
+                        "portfolio:add_transaction", args=[self.coin.id]
+                    ),
+                    fetch_redirect_response=False,
+                )

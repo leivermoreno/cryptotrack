@@ -234,11 +234,26 @@ marked ✅.
 
    Goal: close the open-redirect risk before broad view cleanup.
 
-   - 4.1 Add a small helper around Django's allowed-host redirect validation.
-   - 4.2 Use it for watchlist toggles in `coins.views.add_remove_to_watchlist`.
-   - 4.3 Use it for portfolio delete redirects.
-   - 4.4 Preserve useful query strings only after validation.
-   - 4.5 Add regression tests for external URLs and malformed `next` values.
+   - 4.1 ✅ Added `common.utils.get_safe_redirect_url(request, redirect_to)`,
+     a URL-returning helper that strips input, validates it against
+     `{request.get_host()}` with `require_https=request.is_secure()`, and returns
+     `None` for missing, blank, or unsafe targets.
+   - 4.2 ✅ Used `get_safe_redirect_url` in
+     `coins.views.add_remove_to_watchlist`; valid local `next` targets are still
+     honored, while external/protocol-relative targets fall back to
+     `coins:index`. Backslash/malformed redirect policy remains deferred to 4.5.
+   - 4.3 ✅ Used `get_safe_redirect_url` in
+     `portfolio.views.delete_portfolio_transaction`; safe local `next` targets
+     are still honored, while unsafe external targets fall back to the existing
+     `portfolio:add_transaction` redirect. Query-string preservation remains
+     deferred to 4.4.
+   - 4.4 ✅ Portfolio all-transactions delete forms now build `next`
+     from normalized validated context (`page`, `sort`, `direction`) instead
+     of raw request query strings; unrelated query keys are not propagated and
+     edit-page deletes still return to the add-transaction page.
+   - 4.5 ✅ Added view-level regression coverage for external,
+     protocol-relative, and dangerous backslash/scheme-smuggling `next` values;
+     no helper policy change, relying on Django's allowed-host validation.
 
    Verification:
 

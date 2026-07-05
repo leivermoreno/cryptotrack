@@ -5,7 +5,6 @@ from django.contrib.auth.models import User
 from django.db import IntegrityError
 from django.test import Client, TestCase
 from django.urls import reverse
-from django.utils.http import url_has_allowed_host_and_scheme
 
 from common.test_utils import make_market_coin, market_response
 
@@ -335,8 +334,8 @@ class QueryPreservationTest(TestCase):
 
 class OpenRedirectTest(TestCase):
     """The ``next`` open-redirect (inspection/coins.md Key Risks #7). A valid
-    local ``next`` is honored (GREEN); unsafe off-site values must be rejected
-    (expectedFailure until step 4.2 adds safe-redirect validation)."""
+    local ``next`` is honored; external/protocol-relative values fall back to the
+    safe default."""
 
     def setUp(self):
         self.client = Client()
@@ -351,22 +350,20 @@ class OpenRedirectTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, target)
 
-    @unittest.expectedFailure
     def test_unsafe_next_is_rejected(self):
-        # KNOWN BUG: inspection/coins.md Key Risks #7 (open redirect). Fix in
-        # step 4.2. add_remove_to_watchlist redirects to POST['next'] directly,
-        # so a crafted off-site value redirects the user off-site. Desired: an
-        # unsafe destination is rejected in favor of a safe local path.
-        # Currently the view honors the external URL, so this fails now and will
-        # XPASS after step 4.2 adds url_has_allowed_host_and_scheme validation.
         self.client.login(username="testuser", password="pass")
         url = reverse("coins:add_remove_to_watchlist", args=[self.coin.cg_id])
-        for unsafe in ["https://evil.example/", "//evil.example/", "\\evil.example"]:
+        unsafe_values = [
+            "https://evil.example/",
+            "//evil.example/",
+            r"https:\evil.example\phishing",
+            r"\\evil.example\phishing",
+        ]
+        for unsafe in unsafe_values:
             with self.subTest(next=unsafe):
                 response = self.client.post(url, {"next": unsafe})
-                self.assertTrue(
-                    url_has_allowed_host_and_scheme(
-                        response.url, allowed_hosts={"testserver"}
-                    ),
-                    msg=f"redirected to unsafe destination {response.url!r}",
+                self.assertRedirects(
+                    response,
+                    expected_url=reverse("coins:index"),
+                    fetch_redirect_response=False,
                 )

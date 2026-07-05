@@ -35,7 +35,7 @@
                           method="post">
                         {% csrf_token %}
                         <input type="hidden" name="next"
-                               value="{% if transaction %}{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}{% else %}{{ request.path }}{% endif %}">
+                               value="{% if transaction %}{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}{% else %}{{ request.path }}?page={{ page_obj.number }}&sort={{ sort }}&direction={{ direction }}{% endif %}">
                         <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none">Delete</button>
                     </form>
                 </td>

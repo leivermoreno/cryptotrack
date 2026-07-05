@@ -14,7 +14,7 @@ from coins.services import (
 )
 from coins.settings import ALLOWED_SORTS, RESULTS_PAGE, WATCHLIST_COINS_PAGE
 from common.decorators.views import validate_common_params
-from common.utils import get_common_params
+from common.utils import get_common_params, get_safe_redirect_url
 
 validate_common_params = validate_common_params(ALLOWED_SORTS)
 get_common_params = get_common_params(default_sort="rank", default_direction="asc")
@@ -89,7 +89,9 @@ def add_remove_to_watchlist(request, cg_id):
     except Coin.DoesNotExist:
         pass
 
-    next_url = request.POST.get("next") or reverse("coins:index")
+    next_url = get_safe_redirect_url(request, request.POST.get("next")) or reverse(
+        "coins:index"
+    )
     return redirect(next_url)
 
 

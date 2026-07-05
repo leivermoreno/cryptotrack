@@ -20,7 +20,7 @@ from decimal import Decimal
 from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.template.loader import render_to_string
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.utils.html import escape
 
 from common.decorators.views import validate_common_params
@@ -31,7 +31,7 @@ from common.templatetags.common_extras import (
     percentage_change_class,
     sort_link,
 )
-from common.utils import add_direction_sign, get_common_params
+from common.utils import add_direction_sign, get_common_params, get_safe_redirect_url
 
 # The coins app's real ALLOWED_SORTS keys, used to drive the decorator tests.
 ALLOWED_SORTS = {
@@ -177,6 +177,67 @@ class AddDirectionSignTests(SimpleTestCase):
 
     def test_desc_returns_prefixed_sort(self):
         self.assertEqual(add_direction_sign("rank", "desc"), "-rank")
+
+
+@override_settings(ALLOWED_HOSTS=["testserver"])
+class GetSafeRedirectUrlTests(SimpleTestCase):
+    """Validate the shared redirect target helper."""
+
+    def setUp(self):
+        self.rf = RequestFactory()
+
+    def _request(self, secure=False):
+        return self.rf.get("/coins/", secure=secure)
+
+    def test_valid_relative_path_with_query_string_is_returned(self):
+        redirect_to = "/coins/watchlist/?page=2&sort=price&direction=desc"
+        self.assertEqual(
+            get_safe_redirect_url(self._request(), redirect_to),
+            redirect_to,
+        )
+
+    def test_valid_same_host_absolute_url_is_returned(self):
+        redirect_to = "http://testserver/coins/watchlist/?page=2"
+        self.assertEqual(
+            get_safe_redirect_url(self._request(), redirect_to),
+            redirect_to,
+        )
+
+    def test_none_is_rejected(self):
+        self.assertIsNone(get_safe_redirect_url(self._request(), None))
+
+    def test_blank_string_is_rejected(self):
+        self.assertIsNone(get_safe_redirect_url(self._request(), "   "))
+
+    def test_safe_string_is_stripped_before_return(self):
+        self.assertEqual(
+            get_safe_redirect_url(self._request(), "  /coins/watchlist/  "),
+            "/coins/watchlist/",
+        )
+
+    def test_external_url_is_rejected(self):
+        self.assertIsNone(
+            get_safe_redirect_url(self._request(), "https://evil.example/")
+        )
+
+    def test_protocol_relative_url_is_rejected(self):
+        self.assertIsNone(get_safe_redirect_url(self._request(), "//evil.example/"))
+
+    def test_malformed_backslash_url_is_rejected(self):
+        self.assertIsNone(
+            get_safe_redirect_url(
+                self._request(),
+                r"https:\evil.example\phishing",
+            )
+        )
+
+    def test_secure_request_rejects_same_host_http_url(self):
+        self.assertIsNone(
+            get_safe_redirect_url(
+                self._request(secure=True),
+                "http://testserver/coins/watchlist/",
+            )
+        )
 
 
 # ---------------------------------------------------------------------------

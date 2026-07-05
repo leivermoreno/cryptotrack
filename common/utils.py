@@ -1,7 +1,27 @@
+from django.utils.http import url_has_allowed_host_and_scheme
+
+
 def add_direction_sign(sort, direction):
     if direction == "desc":
         return f"-{sort}"
     return sort
+
+
+def get_safe_redirect_url(request, redirect_to):
+    if redirect_to is None:
+        return None
+
+    redirect_to = redirect_to.strip()
+    if not redirect_to:
+        return None
+
+    if url_has_allowed_host_and_scheme(
+        url=redirect_to,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect_to
+    return None
 
 
 def get_common_params(default_sort, default_direction):
