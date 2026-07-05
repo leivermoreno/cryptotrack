@@ -154,4 +154,7 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 COINGECKO_ENDPOINT = "https://api.coingecko.com/api/v3/"
-COINGECKO_KEY = os.environ["CRYPTO_COINGECKO_KEY"]
+# Read lazily so that settings import (and `manage.py check`, migrations, etc.)
+# does not fail when the key is absent. It is only required at runtime for
+# actual CoinGecko requests (see coins/services.py).
+COINGECKO_KEY = os.environ.get("CRYPTO_COINGECKO_KEY", "").strip()
