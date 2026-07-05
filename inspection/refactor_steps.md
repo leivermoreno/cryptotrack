@@ -174,107 +174,62 @@ sections keep their full task lists.
    (id-specific uncached), `Decimal(str(...))` for the one financial field, a `session=`
    test seam, and graceful 200 fallbacks. Suite: 154 tests, 21 expected failures.
 
-6. **Refactor coin catalog sync and scheduler responsibilities**
+6. **Refactor coin catalog sync and scheduler responsibilities** ✅
 
    Goal: separate one-shot data sync from the long-running scheduler and fix stale
    catalog behavior.
 
-   - 6.1 ✅ Move catalog sync into a reusable domain function.
-     Solution: added `coins.sync.sync_supported_coins()` for the one-shot
-     CoinGecko catalog fetch + local persistence path; the scheduler now calls
-     that function and keeps its CoinGecko failure logging/skip behavior.
-   - 6.2 ✅ Add a one-shot management command for syncing supported coins.
-     Solution: added `sync_supported_coins` as a one-shot management command
-     that calls the reusable domain sync once, logs `CoinGeckoError` through the
-     shared failure helper, and exits without starting APScheduler.
-   - 6.3 ✅ Keep the APScheduler command thin and focused on scheduling.
-     Decision/Solution: removed `runapscheduler --run-now`; the one-shot
-     `sync_supported_coins` command is now the seeding path, while
-     `runapscheduler` only registers recurring catalog sync and scheduler
-     cleanup jobs. The scheduled sync job still catches/logs `CoinGeckoError`
-     so API failures do not stop the blocking scheduler.
-   - 6.4 ✅ Fix the interval unit bug by using seconds or an explicitly named
-     minutes value.
-     Decision/Solution: kept the cadence in seconds with
-     `SUPPORTED_COINS_SYNC_INTERVAL_SECONDS = SUPPORTED_COINS_TIMEOUT + 5 * 60`
-     and passed it to APScheduler as `seconds=`, so the recurring sync runs every
-     2 hours and 5 minutes.
-   - 6.5 ✅ Change sync from create-only to update/upsert existing names and symbols.
-     Decision/Solution: sync now loads existing catalog rows by `cg_id`, bulk-creates
-     missing coins, and bulk-updates only existing rows whose `name` or `symbol`
-     changed. Active/inactive status handling was completed in 6.6.
-   - 6.6 ✅ Decide how to mark coins inactive when they disappear from CoinGecko.
-     Decision/Solution: treat CoinGecko's successful active list as the source of
-     truth. Returned coins are created or reactivated with current labels, and
-     active local coins absent from that fetched list are soft-deactivated with
-     `is_active=False`.
-   - 6.7 ✅ Log counts for created, updated, deactivated, skipped, and failed rows.
-     Decision/Solution: `coins.sync.sync_supported_coins()` now returns a small
-     structured result with created, updated, deactivated, skipped, and failed
-     counts. Malformed fetched rows with missing/blank `id`, `name`, or `symbol`
-     are counted as failed and skipped without aborting the run. The one-shot
-     command and the APScheduler job wrapper log successful sync counts, while
-     whole-call `CoinGeckoError` handling stays unchanged.
+   - 6.1–6.3 ✅ Separated sync from scheduling. Problem: catalog sync was entangled
+     with the blocking scheduler and had no standalone entry point. Solution: extracted
+     `coins.sync.sync_supported_coins()` (fetch + persist); added a one-shot
+     `sync_supported_coins` management command as the seeding path; removed
+     `runapscheduler --run-now` so `runapscheduler` only registers recurring jobs. Both
+     the command and the scheduled job log `CoinGeckoError` via the shared helper and
+     skip without crashing.
+   - 6.4 ✅ Interval unit bug. Problem: cadence risked a minutes/seconds mismatch.
+     Solution: `SUPPORTED_COINS_SYNC_INTERVAL_SECONDS = SUPPORTED_COINS_TIMEOUT + 5*60`,
+     passed as `seconds=` (every 2h05m).
+   - 6.5–6.6 ✅ Stale catalog. Problem: sync was create-only, so renamed/delisted coins
+     never updated. Solution: upsert by `cg_id` (bulk-create missing, bulk-update only
+     changed `name`/`symbol`); treat the fetched active list as source of truth —
+     returned coins are created/reactivated, active local coins absent from the fetch are
+     soft-deactivated (`is_active=False`).
+   - 6.7 ✅ Observability. Solution: sync returns structured created/updated/deactivated/
+     skipped/failed counts; malformed rows (missing/blank `id`/`name`/`symbol`) are
+     counted failed and skipped without aborting; command and job log the counts.
 
-   Verification:
+   Verification: interval matches documented cadence; sync tests cover create, update,
+   unchanged, missing/deactivated, malformed rows, count logging, and API failures.
 
-   - Scheduler interval matches the documented cadence.
-   - Sync tests cover create, update, unchanged, missing/deactivated, malformed
-     rows, count logging, and API failure paths.
-
-7. **Replace ad hoc query, sort, pagination, and URL building**
+7. **Replace ad hoc query, sort, pagination, and URL building** ✅
 
    Goal: make list/table behavior consistent across `coins`, `portfolio`, and
    future screens.
 
-   - 7.1 ✅ Replace the split `validate_common_params` plus `get_common_params` contract
-     with one normalized query-state helper.
-     Decision/Solution: added `common.utils.normalize_query_state()` returning a small
-     `QueryState` object for normalized `page`/`sort`/`direction`, with a dedicated
-     `InvalidQueryState` for bad user input. The existing decorator and reader stay as
-     compatibility wrappers, but both now delegate to the same normalization path so
-     validation, defaulting, clamping, and whitespace handling no longer diverge.
-   - 7.2 ✅ Strip and validate page, sort, and direction in one place.
-     Decision/Solution: `normalize_query_state()` remains the single parser and
-     validator for common `page`/`sort`/`direction` params. The validation
-     decorator now syncs only supplied common query keys back onto `request.GET`,
-     replacing nonblank values with stripped normalized values and removing blank
-     common keys so downstream defaults still behave as if the params were absent.
-   - 7.3 ✅ Build encoded query strings through `QueryDict` or `urlencode`.
-     Decision/Solution: added a narrow `common.utils.build_query_string()` helper
-     backed by `QueryDict.urlencode()`. `sort_link` and the shared pagination
-     partial now build query strings from structured params, so search terms with
-     spaces, ampersands, equals signs, and question marks round-trip correctly.
-   - 7.4 ✅ Preserve intended params consistently across sort links and pagination.
-     Decision/Solution: kept `page`/`sort`/`direction`/optional `search` query
-     construction centralized through `pagination_query`/`build_query_string`.
-     Sort links and shared pagination now preserve the same intended state, and
-     stateful form `next` values in the coins and portfolio tables use the same
-     encoded query path instead of manual string concatenation.
-   - 7.5 ✅ Fix portfolio transaction page clamping by using real `Paginator.num_pages`.
-     Decision/Solution: `show_all_transactions` and `create_portfolio_transaction`
-     now derive clamping from a Django `Paginator` for the relevant transaction
-     queryset, so high requested pages clamp to the actual last page instead of an
-     item count that can still raise `EmptyPage`.
-   - 7.6 ✅ Make the common pagination partial generic; remove the hard-coded "Back to
-     Market" action from it.
-     Decision/Solution: the shared pagination partial no longer links to the market
-     by default. It renders an optional generic back action only when callers supply
-     both `pagination_back_url` and `pagination_back_label`, so portfolio pagination
-     no longer inherits a market-specific button.
-   - 7.7 ✅ Make the market index use the same pagination behavior as other pages.
-     Decision/Solution: the market index now creates a Django `Paginator` from the
-     CoinGecko-reported page count and passes `page_obj` to the same shared
-     pagination partial used by search/watchlist pages. The external API call still
-     receives the normalized requested page, while pagination links preserve
-     `page`/`sort`/`direction` through the common query builder.
+   - 7.1–7.2 ✅ Split validation contract. Problem: `validate_common_params` (decorator)
+     and `get_common_params` (reader) parsed/clamped independently and could diverge.
+     Solution: single `common.utils.normalize_query_state()` → `QueryState`
+     (`page`/`sort`/`direction`) with `InvalidQueryState` for bad input; decorator and
+     reader are now thin wrappers over it, and the decorator syncs only supplied common
+     keys back onto `request.GET` (stripped values; blanks removed so defaults apply).
+   - 7.3–7.4 ✅ Unsafe URL building. Problem: query strings were concatenated manually,
+     breaking on spaces/`&`/`=`/`?` and dropping intended params. Solution:
+     `build_query_string()` (backed by `QueryDict.urlencode()`) centralizes
+     `page`/`sort`/`direction`/optional `search`; `sort_link`, the shared pagination
+     partial, and coins/portfolio form `next` values all use it, so state round-trips.
+   - 7.5 ✅ Page clamping. Problem: portfolio clamped against an item count and could
+     still raise `EmptyPage`. Solution: `show_all_transactions` and
+     `create_portfolio_transaction` clamp via a real Django `Paginator.num_pages`.
+   - 7.6 ✅ Generic pagination. Problem: the shared partial hard-coded a "Back to Market"
+     action. Solution: renders an optional back action only when callers pass both
+     `pagination_back_url` and `pagination_back_label`.
+   - 7.7 ✅ Index consistency. Problem: the market index paginated differently from other
+     views. Solution: it builds a `Paginator` from the CoinGecko-reported page count and
+     uses the same shared partial + `page_obj`; the API still gets the normalized
+     requested page.
 
-   Verification:
-
-   - High page values do not raise `EmptyPage`.
-   - Search terms containing spaces, ampersands, equals signs, or question marks
-     produce valid links.
-   - Sorting and pagination preserve the same state on every list view.
+   Verification: high pages don't raise `EmptyPage`; search terms with spaces/`&`/`=`/`?`
+   produce valid links; sort and pagination preserve state on every list view.
 
 8. **Fix shared financial formatting**
 
