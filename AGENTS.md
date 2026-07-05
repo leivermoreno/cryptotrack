@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to AI agents when working with code in this repository.
 
@@ -14,7 +14,13 @@ python manage.py runserver            # dev server at http://localhost:8000
 python manage.py test                 # full test suite
 python manage.py test coins           # single app
 python manage.py test coins.tests.CoinModelTest.test_coin_creation_and_str   # single test
-black .                               # format (black is the configured formatter)
+ruff check .                          # lint
+ruff check --select I --fix .         # sort imports
+ruff check --fix .                    # apply safe lint fixes, including imports
+ruff format .                         # format
+pre-commit install                    # install pre-commit and pre-push hooks
+pre-commit run --all-files            # run commit hooks across the repo
+pre-commit run --hook-stage pre-push --all-files   # run push hooks
 ```
 
 `runapscheduler --run-now` must be run at least once before the app is usable: the `Coin` table is empty otherwise and search/watchlist/portfolio all resolve local `Coin` rows. It runs a **blocking** scheduler (foreground process) that also re-syncs the coin list on an interval.

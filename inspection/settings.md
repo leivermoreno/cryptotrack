@@ -296,23 +296,27 @@ routes, static/media serving routes for development, or namespaced account URLs.
 
 `requirements.txt` pins runtime and developer dependencies together:
 
-- Django 5.2.5 and asgiref 3.9.1 (`requirements.txt:9`).
-- PostgreSQL driver: `psycopg2-binary` (`requirements.txt:17`).
-- Database URL parsing: `dj-database-url` (`requirements.txt:8`).
+- Django 5.2.5 and asgiref 3.9.1
+  (`requirements.txt:9`, `requirements.txt:2`).
+- PostgreSQL driver: `psycopg2-binary` (`requirements.txt:18`).
+- Database URL parsing: `dj-database-url` (`requirements.txt:7`).
 - Forms: `django-crispy-forms` and `crispy-bootstrap5`
-  (`requirements.txt:7`, `requirements.txt:11`).
+  (`requirements.txt:11`, `requirements.txt:6`).
 - Scheduling: APScheduler and django-apscheduler
   (`requirements.txt:1`, `requirements.txt:10`).
 - HTTP: `requests` plus urllib3/certifi/idna/charset-normalizer
-  (`requirements.txt:19`).
-- `.env`: `python-dotenv` (`requirements.txt:18`).
-- Formatting/dev: `black`, `click`, `mypy_extensions`, `pathspec`,
-  `platformdirs`, `packaging` (`requirements.txt:3`).
+  (`requirements.txt:22`, `requirements.txt:26`, `requirements.txt:3`,
+  `requirements.txt:14`, `requirements.txt:4`).
+- `.env`: `python-dotenv` (`requirements.txt:19`).
+- Linting/formatting/import sorting: `ruff` (`requirements.txt:23`,
+  `pyproject.toml`, `.pre-commit-config.yaml`).
+- Git hook orchestration: `pre-commit` and its support packages
+  (`requirements.txt:17`, `.pre-commit-config.yaml`).
 
 Implications:
 
 - There is no separate development/test/production dependency split.
-- `black` and its transitive packages are installed in production if
+- `ruff`, `pre-commit`, and hook support packages are installed in production if
   `requirements.txt` is used directly.
 - There is no explicit Python version file, but the local interpreters checked
   during inspection are Python 3.12.13.

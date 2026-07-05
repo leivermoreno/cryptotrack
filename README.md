@@ -134,6 +134,35 @@ privilege from Installation step 2 are required. To execute the test suite, run:
 python manage.py test
 ```
 
+## Development Tools
+
+Ruff is the code-quality tool for this project:
+
+```bash
+ruff check .                   # lint
+ruff check --select I --fix .  # sort imports
+ruff check --fix .             # apply safe lint fixes, including imports
+ruff format .                  # format
+```
+
+Install Git hooks after installing the project dependencies:
+
+```bash
+pre-commit install
+```
+
+The commit hook sorts imports and formats Python files with Ruff. The push hook
+runs the Django test suite via `scripts/pre_push_tests.sh`, which uses
+`venv/bin/python` when present and otherwise falls back to the active `python`.
+It needs the PostgreSQL test database privileges described above.
+
+To run the hooks manually:
+
+```bash
+pre-commit run --all-files
+pre-commit run --hook-stage pre-push --all-files
+```
+
 ## Verifying Your Setup
 
 After completing Installation, run the verification script to confirm the
