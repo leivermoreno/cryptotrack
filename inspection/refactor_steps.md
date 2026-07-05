@@ -64,20 +64,83 @@ marked ✅.
    Goal: capture current intended behavior before changing shared helpers or
    business rules.
 
-   - 2.1 Mock CoinGecko in all view tests that currently touch market data.
-   - 2.2 Add direct tests for `accounts` login, logout, registration, and redirects.
-   - 2.3 Add direct tests for `common` query validation, pagination, formatting, and
-     sort-link generation.
-   - 2.4 Add `coins` tests for watchlist toggling, invalid CoinGecko ids, inactive
-     coins, query preservation, and unsafe `next` values.
-   - 2.5 Add `portfolio` tests for create, edit, delete, first sell, oversell,
+   Conventions for this section (decided up front, applied to every subtask):
+   - **Known bugs use `@unittest.expectedFailure`** — the test asserts the
+     *correct* desired behavior and is marked expected-failure, with a comment
+     citing the inspection doc and the later step that fixes it. The suite stays
+     green now (expected failures don't fail the run); when the bug is fixed the
+     test flips to an "unexpected success" (XPASS), which signals the fix landed
+     and the marker should be removed.
+   - **Tests only** — no application code is changed in section 2. If a behavior
+     can't be tested without a code change, it's left for the owning step.
+   - **CoinGecko is mocked at the service-function seam** (`get_coin_list_with_market`,
+     `get_page_count`) patched *where they're imported* (`coins.views.*`,
+     `portfolio.services.*`), via a shared factory in `common/test_utils.py`
+     (`make_market_coin` / `market_response`). Numeric market fields are floats,
+     matching CoinGecko's JSON (strings break the `format_number` filter and are
+     unnecessary for `Decimal`). The whole suite now runs offline.
+   - Undecided **design decisions** (e.g. whether a 0% change is neutral) are
+     characterized as green against current behavior, not marked expected-failure.
+
+   - 2.1 ✅ Mock CoinGecko in all view tests that currently touch market data.
+     Added `common/test_utils.py` (shared market-payload factory, documents the
+     patch targets) and converted the network-hitting `coins`/`portfolio` view
+     tests to patch `get_coin_list_with_market`/`get_page_count`. Suite runs
+     fully offline; no app code changed.
+   - 2.2 ✅ Add direct tests for `accounts` login, logout, registration, and redirects.
+     12 green tests over login (render, valid/invalid, `next`, authed-redirect),
+     register (render, valid create → redirect to login with no auto-login,
+     invalid, authed-redirect), logout, and navbar auth states. Asserts against
+     `settings.LOGIN_REDIRECT_URL`/`LOGOUT_REDIRECT_URL` (not hardcoded `/`); uses
+     `get_user_model()` per the step-9 direction. No genuine current bug found, so
+     no expected-failure tests; deferred enhancements (auto-login, success
+     messages, password reset) are left for step 14.
+   - 2.3 ✅ Add direct tests for `common` query validation, pagination, formatting, and
+     sort-link generation. 52 tests, 8 marked `@expectedFailure` for known bugs:
+     negative non-integer `format_number`/`format_amount` truncation (→ step 8.1),
+     `format_number("")` raising instead of a safe fallback (→ 8.2), `-0.00%` from
+     tiny negatives in `format_percentage` (→ 8.3), and `sort_link` not
+     URL-encoding the `search` value (→ 7.3/7.4). Decorator/`get_common_params`
+     validation, page clamping, and the pagination partial (incl. its hard-coded
+     "Back to Market" link) are characterized green; `percentage_change_class(0)`
+     kept green pending the step-8.4 neutral-vs-danger decision.
+   - 2.4 ✅ Add `coins` tests for watchlist toggling, invalid CoinGecko ids, inactive
+     coins, query preservation, and unsafe `next` values. Added green tests for
+     fresh/isolated watchlist toggling (two-user isolation), no-op on invalid
+     `cg_id`, inactive-coin soft-hide (excluded from `get_coin_ids_for_user`,
+     toggle no-op, search filtering — via `mock.call_args`), and `search`-term
+     preservation across pagination. Two `@expectedFailure` bugs: the market index
+     prev/next links drop `sort`/`direction` (→ step 7.7), and `add_remove_to_watchlist`
+     honors an off-site `next` (open redirect; verified `Location: https://evil.example/`
+     → step 4.2). Inactive-coin behavior kept green as a characterization pending
+     the steps 11.6/12 visibility decision.
+   - 2.5 ✅ Add `portfolio` tests for create, edit, delete, first sell, oversell,
      negative/zero values, high page numbers, FIFO lots, and mocked overview
-     market data.
+     market data. Green: FIFO `build_holdings` (single/multi lots, partial/full/
+     spanning sells, coin isolation), overview math against a mocked price
+     (avg buy price, cost basis, UPL, allocation), create/edit/delete workflows,
+     and oversell-on-existing-balance rejection. 12 `@expectedFailure` bugs:
+     oversold-ledger `IndexError` (→ 11.1), div-by-zero on zero prices (→ 11.5),
+     `get_coin_balance` returning `None` and the resulting first-sell `TypeError`
+     (→ 10.2/10.4), negative/zero amount and zero price accepted (→ 10.1),
+     non-edit-aware sell edit (→ 10.4), unvalidated buy edit vs later sells
+     (→ 10.5), `EmptyPage` on a high page number (→ 7.5), wrong delete message
+     wording (→ 10.7), and the delete-path open redirect (→ 4.3). Missing-market
+     holdings kept green as a characterization pending step 11.4. (This subtask
+     was completed directly rather than by a sub-agent, which was interrupted.)
 
    Verification:
 
-   - The suite can run offline with a dummy CoinGecko key.
-   - Tests fail for at least the known current bugs before fixes are applied.
+   - ✅ The suite runs offline: proved by black-holing HTTP (`HTTP(S)_PROXY` to a
+     dead port) with `COINGECKO_KEY=dummy` — 120 tests pass, 0 network hits. This
+     also surfaced and fixed 3 tests whose `assertRedirects` was silently fetching
+     a market-rendering redirect target (now `fetch_redirect_response=False`).
+   - ✅ Known current bugs are captured as executable specs: 22 `@expectedFailure`
+     tests across `common` (8), `coins` (2), and `portfolio` (12) assert the
+     correct behavior and fail today, flipping to XPASS as each later step lands.
+
+   Result: 120 tests, all green, 22 expected failures. No application code was
+   changed in this section (tests + `common/test_utils.py` only).
 
 3. **Harden project configuration and security defaults**
 
