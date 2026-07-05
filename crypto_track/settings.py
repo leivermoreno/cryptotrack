@@ -126,6 +126,17 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+# Authentication redirects
+# https://docs.djangoproject.com/en/5.2/ref/settings/#login-url
+# Stated explicitly so auth redirects don't depend on Django's defaults
+# (which assume accounts are mounted at /accounts/ and land logins on the
+# nonexistent /accounts/profile/). Named URLs survive changes to URL prefixes.
+
+LOGIN_URL = "login"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
+
+
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
