@@ -1,9 +1,10 @@
 from django.urls import path
+
 from coins.views import (
-    render_index,
     add_remove_to_watchlist,
-    render_watchlist,
+    render_index,
     render_search,
+    render_watchlist,
 )
 
 app_name = "coins"

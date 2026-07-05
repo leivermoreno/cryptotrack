@@ -165,9 +165,12 @@ class NavbarAuthStateTest(TestCase):
         from common.test_utils import market_response
 
         self.client.force_login(self.user)
-        with patch("coins.views.get_page_count", return_value=1), patch(
-            "coins.views.get_coin_list_with_market",
-            return_value=market_response("bitcoin"),
+        with (
+            patch("coins.views.get_page_count", return_value=1),
+            patch(
+                "coins.views.get_coin_list_with_market",
+                return_value=market_response("bitcoin"),
+            ),
         ):
             response = self.client.get(reverse("coins:index"))
 

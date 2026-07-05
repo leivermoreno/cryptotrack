@@ -1,8 +1,9 @@
 from decimal import Decimal
 
-from django.db import models
-from django.db.models import F, Case, When, Sum
 from django.contrib.auth.models import User
+from django.db import models
+from django.db.models import Case, F, Sum, When
+
 from coins.models import Coin
 
 
@@ -36,9 +37,7 @@ class PortfolioTransaction(models.Model):
                     default=Decimal("0"),
                 )
             )
-        )[
-            "amount_sum"
-        ]
+        )["amount_sum"]
         return balance
 
     @staticmethod

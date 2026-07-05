@@ -1,8 +1,10 @@
-import threading
 import math
+import threading
+
+import requests
 from django.conf import settings
 from django.core.cache import cache
-import requests
+
 from coins.settings import ALLOWED_SORTS, RESULTS_PAGE
 
 CG_API_KEY = settings.COINGECKO_KEY

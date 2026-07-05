@@ -1,21 +1,21 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.shortcuts import render, redirect
+from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from coins.models import Coin
 from common.decorators.views import validate_common_params
-from common.utils import get_common_params, add_direction_sign
+from common.utils import add_direction_sign, get_common_params
 from portfolio.forms import PortfolioTransactionForm
 from portfolio.models import PortfolioTransaction
 from portfolio.services import get_portfolio_overview_data
 from portfolio.settings import (
     ALLOWED_SORTS,
-    DEFAULT_SORT,
     DEFAULT_DIRECTION,
-    TRANSACTIONS_PER_PAGE,
+    DEFAULT_SORT,
     OVERVIEW_ALLOWED_SORTS,
+    TRANSACTIONS_PER_PAGE,
 )
 
 validate_common_params_defaults = validate_common_params(ALLOWED_SORTS)

@@ -93,9 +93,7 @@ WSGI_APPLICATION = "crypto_track.wsgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=env(
-            "DATABASE_URI", default="postgres://crypto_track@/crypto_track"
-        ),
+        default=env("DATABASE_URI", default="postgres://crypto_track@/crypto_track"),
     )
 }
 
