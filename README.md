@@ -90,9 +90,28 @@ python manage.py runserver
 
 Then open your browser and navigate to `http://localhost:8000`.
 
+## Database Strategy
+
+PostgreSQL is the **only** supported database for local development, tests, and
+production. There is no SQLite fallback or separate lightweight test settings
+path — this is a deliberate choice:
+
+- The app depends on PostgreSQL-specific behavior and on financial calculations
+  where engine differences (numeric/`Decimal` handling, constraints) could let
+  tests pass on SQLite while failing in production.
+- Running tests against the real engine keeps test and production behavior
+  aligned, with no divergence to reason about.
+
+The cost is that a running PostgreSQL instance is required even for tests. See
+step 2 of Installation for the role/database setup, including the `CONNECT`
+privilege on the `postgres` database that Django needs to create the temporary
+`test_*` database.
+
 ## Running Tests
 
-To execute the test suite, run:
+Tests run against a temporary `test_*` PostgreSQL database that Django creates
+and drops automatically, so a running PostgreSQL instance and the `CONNECT`
+privilege from Installation step 2 are required. To execute the test suite, run:
 
 ```bash
 python manage.py test
