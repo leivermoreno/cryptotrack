@@ -58,5 +58,8 @@ jobs:
       - name: Create cache table
         run: python manage.py createcachetable
 
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
+
       - name: Run tests
         run: python manage.py test --noinput
