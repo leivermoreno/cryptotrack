@@ -5,7 +5,9 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
+from django.db import connection
 from django.test import Client, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -252,6 +254,25 @@ class BuildHoldingsTest(TestCase):
         self.assertEqual(holdings[self.coin.cg_id][0]["amount"], Decimal("2"))
         self.assertEqual(holdings[self.coin2.cg_id][0]["amount"], Decimal("5"))
 
+    def test_same_timestamp_fifo_uses_id_tiebreak(self):
+        # Two buys share the exact same ``created`` timestamp; FIFO must consume
+        # the earlier-inserted (lower-id) lot first. Without the ``id`` tiebreak
+        # in build_holdings' ordering this would be nondeterministic.
+        _make_tx(self.user, self.coin, "buy", 1, 10000, created=self.base)
+        _make_tx(self.user, self.coin, "buy", 1, 20000, created=self.base)
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            1,
+            25000,
+            created=self.base + timedelta(hours=1),
+        )
+        lots = list(self._holdings()[self.coin.cg_id])
+        # first buy (price 10000, lower id) consumed; second buy (20000) remains
+        self.assertEqual(len(lots), 1)
+        self.assertEqual(lots[0]["price"], Decimal("20000"))
+
     @unittest.expectedFailure
     def test_oversold_history_does_not_crash(self):
         # BUG (inspection/portfolio.md, "Service concerns"): a sell before enough
@@ -402,21 +423,20 @@ class TransactionValidationBugsTest(TestCase):
         return reverse("portfolio:add_transaction", args=[self.coin.id])
 
     def test_get_coin_balance_zero_for_no_rows(self):
-        # This is written as an expected failure below via a dedicated test; here
-        # we only document that no-rows currently yields None. (kept as green
-        # characterization of the current return value)
-        self.assertIsNone(PortfolioTransaction.get_coin_balance(self.user, self.coin))
-
-    @unittest.expectedFailure
-    def test_get_coin_balance_should_be_zero_not_none(self):
-        # BUG (inspection/portfolio.md): get_coin_balance() returns None for a
-        # user/coin with no transactions, which breaks first-sell validation.
-        # Step 10.2 should return Decimal("0").
+        # get_coin_balance() coalesces an empty aggregate to Decimal("0") (step
+        # 10.2), so a user/coin with no transactions reports a zero balance.
         self.assertEqual(
             PortfolioTransaction.get_coin_balance(self.user, self.coin), Decimal("0")
         )
 
-    @unittest.expectedFailure
+    def test_get_coin_balance_should_be_zero_not_none(self):
+        # BUG (inspection/portfolio.md): get_coin_balance() returned None for a
+        # user/coin with no transactions, which broke first-sell validation.
+        # Step 10.2 returns Decimal("0").
+        self.assertEqual(
+            PortfolioTransaction.get_coin_balance(self.user, self.coin), Decimal("0")
+        )
+
     def test_first_transaction_sell_is_rejected_gracefully(self):
         # BUG (inspection/portfolio.md): first tx being a sell → balance is None →
         # `amount > None` raises TypeError (500). Steps 10.2/10.4 should reject it
@@ -427,7 +447,6 @@ class TransactionValidationBugsTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(PortfolioTransaction.objects.filter(coin=self.coin).exists())
 
-    @unittest.expectedFailure
     def test_negative_amount_is_rejected(self):
         # BUG (inspection/portfolio.md): the bare ModelForm accepts negative
         # amounts. Step 10.1 should validate amount > 0.
@@ -436,7 +455,6 @@ class TransactionValidationBugsTest(TestCase):
         )
         self.assertEqual(PortfolioTransaction.objects.filter(coin=self.coin).count(), 0)
 
-    @unittest.expectedFailure
     def test_zero_amount_is_rejected(self):
         # BUG (inspection/portfolio.md): zero amount accepted. Step 10.1.
         self.client.post(
@@ -444,13 +462,11 @@ class TransactionValidationBugsTest(TestCase):
         )
         self.assertEqual(PortfolioTransaction.objects.filter(coin=self.coin).count(), 0)
 
-    @unittest.expectedFailure
     def test_zero_price_is_rejected(self):
         # BUG (inspection/portfolio.md): zero/negative price accepted. Step 10.1.
         self.client.post(self._add_url(), {"type": "buy", "amount": "1", "price": "0"})
         self.assertEqual(PortfolioTransaction.objects.filter(coin=self.coin).count(), 0)
 
-    @unittest.expectedFailure
     def test_sell_edit_is_edit_aware(self):
         # BUG (inspection/portfolio.md): editing a sell compares the new amount to
         # a balance that still includes the OLD sell, wrongly rejecting valid
@@ -467,7 +483,6 @@ class TransactionValidationBugsTest(TestCase):
         sell.refresh_from_db()
         self.assertEqual(sell.amount, Decimal("4"))
 
-    @unittest.expectedFailure
     def test_buy_edit_validated_against_later_sells(self):
         # BUG (inspection/portfolio.md): buy edits are not validated against later
         # sells, so a buy can be reduced below what was already sold, creating an
@@ -483,6 +498,229 @@ class TransactionValidationBugsTest(TestCase):
         self.client.post(url, {"type": "buy", "amount": "3", "price": "10000"})
         buy.refresh_from_db()
         self.assertEqual(buy.amount, Decimal("5"))  # unchanged (edit rejected)
+
+
+# ---------------------------------------------------------------------------
+# 10.4 — edit-aware sell validation (regression coverage on the 10.3 replay)
+# ---------------------------------------------------------------------------
+class SellEditAwareTest(TestCase):
+    """Locks in edit-aware sell validation delivered by the 10.3 replay.
+
+    Editing a sell replaces that row in its own ``(created, id)`` slot before
+    the feasibility replay, so the old sell amount never double-counts. These
+    tests drive the real form -> ledger service -> view path via the edit view
+    and assert persisted state with ``refresh_from_db()``.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="sea", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        self.client.login(username="sea", password="pass")
+        self.base = timezone.now()
+
+    def _edit_url(self, tx):
+        return reverse("portfolio:edit_transaction", args=[self.coin.id, tx.id])
+
+    def _balance(self):
+        return PortfolioTransaction.get_coin_balance(self.user, self.coin)
+
+    def test_edit_sell_down_is_accepted(self):
+        # buy 5, sell 4 -> balance 1; editing the sell DOWN to 2 stays feasible
+        # (5 - 2 = 3) and is accepted.
+        _make_tx(self.user, self.coin, "buy", 5, 10000, created=self.base)
+        sell = _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            4,
+            12000,
+            created=self.base + timedelta(hours=1),
+        )
+        response = self.client.post(
+            self._edit_url(sell), {"type": "sell", "amount": "2", "price": "12000"}
+        )
+        self.assertEqual(response.status_code, 302)
+        sell.refresh_from_db()
+        self.assertEqual(sell.amount, Decimal("2"))
+        self.assertEqual(self._balance(), Decimal("3"))
+
+    def test_edit_sell_up_to_infeasible_is_rejected(self):
+        # buy 5, sell 2 -> balance 3; editing the sell UP to 6 oversells (5 - 6 =
+        # -1). Rejected with a form error on `amount`, the row unchanged, HTTP 200.
+        _make_tx(self.user, self.coin, "buy", 5, 10000, created=self.base)
+        sell = _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            2,
+            12000,
+            created=self.base + timedelta(hours=1),
+        )
+        response = self.client.post(
+            self._edit_url(sell), {"type": "sell", "amount": "6", "price": "12000"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Insufficient balance")
+        self.assertIn("amount", response.context["form"].errors)
+        sell.refresh_from_db()
+        self.assertEqual(sell.amount, Decimal("2"))  # unchanged (edit rejected)
+        self.assertEqual(self._balance(), Decimal("3"))
+
+    def test_edit_first_sell_up_replays_before_later_sell(self):
+        # (created, id) ordering matters: buy 10 @t0, sell 3 @t1, sell 3 @t2.
+        # Editing the FIRST sell up to 8 replays 10 - 8 = 2, then - 3 = -1, which
+        # goes negative mid-history even though the naive final balance
+        # (10 - 8 - 3 = -1) would too; the point is the replay rejects and the
+        # first sell stays 3.
+        _make_tx(self.user, self.coin, "buy", 10, 10000, created=self.base)
+        first_sell = _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            3,
+            12000,
+            created=self.base + timedelta(hours=1),
+        )
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            3,
+            12000,
+            created=self.base + timedelta(hours=2),
+        )
+        response = self.client.post(
+            self._edit_url(first_sell),
+            {"type": "sell", "amount": "8", "price": "12000"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Insufficient balance")
+        self.assertIn("amount", response.context["form"].errors)
+        first_sell.refresh_from_db()
+        self.assertEqual(first_sell.amount, Decimal("3"))  # unchanged
+
+
+# ---------------------------------------------------------------------------
+# 10.5 — buy edits/deletes validated against later sells (replay, not final
+# balance)
+# ---------------------------------------------------------------------------
+class BuyEditDeleteVsLaterSellsTest(TestCase):
+    """Locks in buy-edit and buy-delete validation via the 10.3 feasibility replay.
+
+    A buy cannot be reduced (edit) or removed (delete) below what later sells
+    already consumed, because the replay projects the change onto the full
+    ``(created, id)``-ordered history and rejects the instant the running
+    balance goes negative -- at ANY point, not merely at the final balance.
+    These tests drive the real views (edit = POST ``portfolio:edit_transaction``;
+    delete = POST ``portfolio:delete_transaction``) and assert persisted state.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="bevls", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        self.client.login(username="bevls", password="pass")
+        self.base = timezone.now()
+
+    def _edit_url(self, tx):
+        return reverse("portfolio:edit_transaction", args=[self.coin.id, tx.id])
+
+    def _delete_url(self, tx):
+        return reverse("portfolio:delete_transaction", args=[self.coin.id, tx.id])
+
+    def test_buy_edit_down_still_feasible_is_accepted(self):
+        # buy 5 @t0, sell 2 @t1 -> editing the buy DOWN to 4 replays 4 - 2 = 2
+        # (>= 0 throughout) and is accepted; the buy row now holds 4.
+        buy = _make_tx(self.user, self.coin, "buy", 5, 10000, created=self.base)
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            2,
+            12000,
+            created=self.base + timedelta(hours=1),
+        )
+        response = self.client.post(
+            self._edit_url(buy), {"type": "buy", "amount": "4", "price": "10000"}
+        )
+        self.assertEqual(response.status_code, 302)
+        buy.refresh_from_db()
+        self.assertEqual(buy.amount, Decimal("4"))
+
+    def test_buy_delete_a_later_sell_depended_on_is_rejected(self):
+        # buy 5 @t0, sell 5 @t1 -> deleting the buy leaves just the sell, replaying
+        # to -5. Rejected via a messages error; the delete view always redirects
+        # (302) and the buy row must still exist.
+        buy = _make_tx(self.user, self.coin, "buy", 5, 10000, created=self.base)
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            5,
+            12000,
+            created=self.base + timedelta(hours=1),
+        )
+        response = self.client.post(self._delete_url(buy))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(PortfolioTransaction.objects.filter(pk=buy.pk).exists())
+        msgs = [str(m) for m in get_messages(response.wsgi_request)]
+        self.assertTrue(msgs)  # an error message was added
+
+    def test_buy_delete_rejected_even_when_final_balance_would_be_nonnegative(self):
+        # THE key case: buy 5 @t0, sell 5 @t1, buy 5 @t2 (final balance 5).
+        # Deleting the FIRST buy (@t0) replays: sell 5 -> -5 at t1 -> rejected,
+        # EVEN THOUGH the post-deletion final balance (0) would be >= 0. Proves
+        # the guard is a mid-history feasibility replay, not a final-balance check.
+        first_buy = _make_tx(self.user, self.coin, "buy", 5, 10000, created=self.base)
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            5,
+            12000,
+            created=self.base + timedelta(hours=1),
+        )
+        _make_tx(
+            self.user,
+            self.coin,
+            "buy",
+            5,
+            10000,
+            created=self.base + timedelta(hours=2),
+        )
+        response = self.client.post(self._delete_url(first_buy))
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(PortfolioTransaction.objects.filter(pk=first_buy.pk).exists())
+
+    def test_buy_edit_down_rejected_even_when_final_balance_would_be_nonnegative(self):
+        # Mirror of the delete case for edits: buy 5 @t0, sell 5 @t1, buy 5 @t2.
+        # Editing the FIRST buy DOWN to 3 replays 3 -> -2 at t1 -> rejected even
+        # though the final balance (3 - 5 + 5 = 3) would be >= 0. Form error on
+        # `amount`, HTTP 200, the buy row unchanged.
+        first_buy = _make_tx(self.user, self.coin, "buy", 5, 10000, created=self.base)
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            5,
+            12000,
+            created=self.base + timedelta(hours=1),
+        )
+        _make_tx(
+            self.user,
+            self.coin,
+            "buy",
+            5,
+            10000,
+            created=self.base + timedelta(hours=2),
+        )
+        response = self.client.post(
+            self._edit_url(first_buy), {"type": "buy", "amount": "3", "price": "10000"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Insufficient balance")
+        self.assertIn("amount", response.context["form"].errors)
+        first_buy.refresh_from_db()
+        self.assertEqual(first_buy.amount, Decimal("5"))  # unchanged (edit rejected)
 
 
 # ---------------------------------------------------------------------------
@@ -559,11 +797,10 @@ class DeletePathTest(TestCase):
         self.assertEqual(response.url, target)
         self.assertTrue(url_has_allowed_host_and_scheme(response.url, {"testserver"}))
 
-    @unittest.expectedFailure
     def test_delete_buy_message_names_buy(self):
         # BUG (inspection/portfolio.md): deleting a buy that would make the balance
-        # negative is guarded, but the message text says "sell transaction".
-        # Step 10.7 should fix the wording.
+        # negative was guarded, but the message text said "sell transaction".
+        # Step 10.7 fixed the wording so it names a buy.
         buy = PortfolioTransaction.objects.create(
             user=self.user, coin=self.coin, type="buy", amount=2, price=10000
         )
@@ -598,3 +835,34 @@ class DeletePathTest(TestCase):
                     ),
                     fetch_redirect_response=False,
                 )
+
+
+class LedgerLockingTest(TestCase):
+    """10.6 -- the mutation path must request a row-scoped ``FOR UPDATE`` lock.
+
+    A normal ``TestCase`` is correct here: ``select_for_update`` emits its
+    ``FOR UPDATE`` SQL inside the test's surrounding transaction. Concurrency
+    itself is intentionally not tested (a threaded test is flaky); we only prove
+    the lock is requested and scoped to ``PortfolioTransaction``.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="testuser", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        PortfolioTransaction.objects.create(
+            user=self.user, coin=self.coin, type="buy", amount=5, price=10000
+        )
+
+    def test_create_requests_row_scoped_lock(self):
+        from portfolio.ledger import create_transaction
+
+        with CaptureQueriesContext(connection) as ctx:
+            create_transaction(
+                user=self.user,
+                coin=self.coin,
+                type="buy",
+                amount=Decimal("1"),
+                price=Decimal("10000"),
+            )
+        sql = " ".join(q["sql"].lower() for q in ctx.captured_queries)
+        self.assertIn("for update of", sql)

@@ -50,7 +50,7 @@ def build_holdings(user, coin_ids):
         PortfolioTransaction.objects.filter(
             user=user, coin_id__in=coin_ids, coin__is_active=True
         )
-        .order_by("created")
+        .order_by("created", "id")
         .select_related("coin")
     )
     holdings = defaultdict(deque)

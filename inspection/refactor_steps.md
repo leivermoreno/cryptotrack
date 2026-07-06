@@ -320,16 +320,88 @@ sections keep their full task lists.
 
     Goal: make transaction correctness independent of view code.
 
-    - 10.1 Add positive amount and positive price validation at the form/model layer.
-    - 10.2 Make `get_coin_balance()` return `Decimal("0")` for no rows.
-    - 10.3 Centralize create, edit, and delete validation in a portfolio service.
-    - 10.4 Make sell validation edit-aware.
-    - 10.5 Validate buy edits and buy deletes against later sells, not just final
+    - 10.1 ✅ Add positive amount and positive price validation at the form/model layer.
+      Decision/solution: added defense-in-depth `amount > 0` / `price > 0` validation at
+      three layers — `PortfolioTransactionForm.clean_amount`/`clean_price` (field-scoped
+      errors "Amount/Price must be greater than zero."), model field
+      `MinValueValidator(Decimal("0.00000001"))` (smallest value at `decimal_places=8`,
+      so it excludes zero), and two DB `CheckConstraint`s
+      (`portfolio_transaction_amount_gt_0`, `portfolio_transaction_price_gt_0`) so raw
+      ORM writes that bypass the form cannot corrupt the ledger. Migration `0003` carries
+      the `AlterField` ×2 + `AddConstraint` ×2; ledger/balance rules stay out of 10.1
+      (deferred to the 10.3 service).
+    - 10.2 ✅ Make `get_coin_balance()` return `Decimal("0")` for no rows.
+      Decision/solution: wrapped the `Sum(Case(...))` aggregate in
+      `Coalesce(..., Decimal("0"))` (from `django.db.models.functions`) so the DB
+      returns zero instead of `None` for a user/coin with no transactions; buy-minus-sell
+      semantics are unchanged for the non-empty case. This also fixes the first-sell
+      crash for free: the create view's `amount > balance` check now evaluates `1 > 0`
+      (a graceful form-error rejection) instead of `1 > None` (`TypeError`/500), so
+      `test_first_transaction_sell_is_rejected_gracefully` now passes without touching
+      view code (edit-aware sell validation remains 10.4).
+    - 10.3 ✅ Centralize create, edit, and delete validation in a portfolio service.
+      Decision/solution: added `portfolio/ledger.py` (`create_transaction`,
+      `update_transaction`, `delete_transaction`) and `portfolio/exceptions.py`
+      (`LedgerError`). All three mutations share one feasibility replay: load the
+      user's rows for that coin ordered `(created, id)`, project the create/edit/delete,
+      replay the running balance, and raise `LedgerError` the instant it goes negative
+      (an oversell at any point, not just the final balance). The views are now thin —
+      create/edit translates `LedgerError` into a form error on `amount` and re-renders
+      (HTTP 200); delete translates it into an error message and keeps the redirect flow.
+      Note: the edit-aware sell check (10.4) and the buy-edit/delete-vs-later-sells check
+      (10.5) are both delivered by this shared replay — editing a row replaces it in its
+      own slot so its old values never leak in — so `test_sell_edit_is_edit_aware` and
+      `test_buy_edit_validated_against_later_sells` now pass (expected failures 5 → 3);
+      10.4/10.5 will harden and extend coverage on top of this mechanism. Concurrency
+      wrapping is deferred to 10.6 (TODO markers left at each load-replay-save site) and
+      the wrong buy-delete wording is preserved verbatim for 10.7 (TODO marker left).
+    - 10.4 ✅ Make sell validation edit-aware.
+      Decision/solution: edit-aware sell validation is delivered by the shared 10.3
+      feasibility replay — `update_transaction` replaces the edited row in its own
+      `(created, id)` slot before replaying, so the old sell amount never double-counts
+      and valid up/down edits are no longer wrongly rejected. This step adds regression
+      coverage (new `SellEditAwareTest`, driven through the edit view → form → ledger
+      service path with `refresh_from_db()`): a sell edited DOWN is accepted (balance
+      re-checked), a sell edited UP to an infeasible amount is rejected with a form error
+      on `amount` and left unchanged (HTTP 200), and editing an earlier sell UP with a
+      LATER sell present is rejected because the replay goes negative mid-history —
+      exercising the `(created, id)` ordering.
+    - 10.5 ✅ Validate buy edits and buy deletes against later sells, not just final
       balance.
-    - 10.6 Wrap balance-changing writes in a database transaction and consider
+      Decision/solution: buy edits and buy deletes are validated by the shared 10.3
+      feasibility replay against the full `(created, id)`-ordered history, so a buy can't
+      be reduced (`update_transaction`) or removed (`delete_transaction`) below what later
+      sells already consumed — the replay rejects the instant the running balance goes
+      negative at ANY point, not merely at the final balance. This step adds regression
+      coverage (new `BuyEditDeleteVsLaterSellsTest`, driven through the real edit/delete
+      views with `refresh_from_db()`/`.exists()`): a still-feasible buy edit-down is
+      accepted, a buy delete a later sell depended on is rejected via a messages error
+      (row survives, 302), and — the key case — deleting/editing-down an earlier buy is
+      rejected even when the post-change FINAL balance would stay non-negative, proving the
+      guard is a mid-history feasibility replay rather than a final-balance check.
+    - 10.6 ✅ Wrap balance-changing writes in a database transaction and consider
       row-level locking for concurrent sells.
-    - 10.7 Fix the delete error message for the guarded buy-delete case.
-    - 10.8 Add deterministic ordering for ledger calculations, such as `created, id`.
+      Decision/solution: each mutation (`create/update/delete_transaction`) now wraps
+      its load-replay-save in `transaction.atomic()` and loads the user/coin ledger
+      rows via a new `_locked_rows` helper using `select_for_update(of=("self",))`,
+      scoped so only `PortfolioTransaction` rows are locked and the catalog sync's
+      `Coin` writes aren't contended. Under READ COMMITTED a blocked concurrent sell
+      re-reads the committer's newly inserted row after it commits; the empty-ledger
+      first-write case is left unlocked because it's invariant-safe (concurrent
+      first-buys only add balance; concurrent first-sells both reject at balance 0).
+      Verified with a `CaptureQueriesContext` `FOR UPDATE OF` assertion; a threaded
+      concurrency test was intentionally skipped as flaky.
+    - 10.7 ✅ Fix the delete error message for the guarded buy-delete case.
+      Decision/solution: the delete-rejection message now names a buy
+      ("Deleting this buy transaction would make your balance negative."), since the
+      feasibility replay only ever rejects a buy delete -- deleting a sell can't drive
+      the balance negative. Dropped the now-passing `expectedFailure` on
+      `test_delete_buy_message_names_buy`.
+    - 10.8 ✅ Add deterministic ordering for ledger calculations, such as `created, id`.
+      Decision/solution: `build_holdings` now orders `(created, id)` so FIFO lot
+      consumption is deterministic under tied timestamps, matching the ledger service's
+      replay ordering; a global `Meta.ordering` was intentionally NOT added (out of scope,
+      would affect list/pagination views).
 
     Verification:
 

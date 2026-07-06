@@ -15,7 +15,13 @@ from common.utils import (
     get_safe_redirect_url,
     handle_market_unavailable,
 )
+from portfolio.exceptions import LedgerError
 from portfolio.forms import PortfolioTransactionForm
+from portfolio.ledger import (
+    create_transaction,
+    delete_transaction,
+    update_transaction,
+)
 from portfolio.models import PortfolioTransaction
 from portfolio.services import get_portfolio_overview_data
 from portfolio.settings import (
@@ -129,16 +135,25 @@ def create_portfolio_transaction(
     form = PortfolioTransactionForm(request.POST or None, instance=transaction)
     if request.method == "POST":
         if form.is_valid():
-            if (
-                form.cleaned_data["type"] == "sell"
-                and form.cleaned_data["amount"] > balance
-            ):
-                form.add_error("amount", "Insufficient balance to sell this amount.")
+            try:
+                if transaction is not None:
+                    update_transaction(
+                        transaction=transaction,
+                        type=form.cleaned_data["type"],
+                        amount=form.cleaned_data["amount"],
+                        price=form.cleaned_data["price"],
+                    )
+                else:
+                    create_transaction(
+                        user=request.user,
+                        coin=coin,
+                        type=form.cleaned_data["type"],
+                        amount=form.cleaned_data["amount"],
+                        price=form.cleaned_data["price"],
+                    )
+            except LedgerError as exc:
+                form.add_error("amount", str(exc))
             else:
-                transaction = form.save(commit=False)
-                transaction.user = request.user
-                transaction.coin = coin
-                transaction.save()
                 if coin_id:
                     return redirect("portfolio:add_transaction", coin_id=coin_id)
                 else:
@@ -168,15 +183,10 @@ def delete_portfolio_transaction(request, coin_id, transaction_id):
             pk=transaction_id, user=request.user, coin=coin
         )
 
-        balance = PortfolioTransaction.get_coin_balance(request.user, coin)
-        if transaction.type == "buy" and balance - transaction.amount < 0:
-            messages.add_message(
-                request,
-                messages.ERROR,
-                "If you delete this sell transaction, your balance will be negative.",
-            )
-        else:
-            transaction.delete()
+        try:
+            delete_transaction(transaction=transaction)
+        except LedgerError as exc:
+            messages.add_message(request, messages.ERROR, str(exc))
         next_url = get_safe_redirect_url(request, request.POST.get("next"))
         if next_url:
             return redirect(next_url)
