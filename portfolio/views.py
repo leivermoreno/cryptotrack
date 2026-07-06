@@ -38,6 +38,19 @@ validate_common_params_defaults = validate_common_params(ALLOWED_SORTS)
 get_common_params_defaults = get_common_params(DEFAULT_SORT, DEFAULT_DIRECTION)
 
 
+def _log_ledger_validation_failure(*, operation, user, coin, exc, transaction=None):
+    logger.warning(
+        "Portfolio ledger validation rejected operation=%s user_id=%s "
+        "coin_id=%s cg_id=%s transaction_id=%s reason=%s",
+        operation,
+        user.id,
+        coin.id,
+        coin.cg_id,
+        transaction.id if transaction is not None else None,
+        exc,
+    )
+
+
 @login_required
 @validate_common_params(OVERVIEW_ALLOWED_SORTS)
 def portfolio_overview(request):
@@ -165,6 +178,13 @@ def create_portfolio_transaction(
                         trade_date=form.cleaned_data["trade_date"],
                     )
             except LedgerError as exc:
+                _log_ledger_validation_failure(
+                    operation="update" if transaction is not None else "create",
+                    user=request.user,
+                    coin=coin,
+                    transaction=transaction,
+                    exc=exc,
+                )
                 form.add_error("amount", str(exc))
             else:
                 if coin_id:
@@ -199,6 +219,13 @@ def delete_portfolio_transaction(request, coin_id, transaction_id):
         try:
             delete_transaction(transaction=transaction)
         except LedgerError as exc:
+            _log_ledger_validation_failure(
+                operation="delete",
+                user=request.user,
+                coin=coin,
+                transaction=transaction,
+                exc=exc,
+            )
             messages.add_message(request, messages.ERROR, str(exc))
         next_url = get_safe_redirect_url(request, request.POST.get("next"))
         if next_url:

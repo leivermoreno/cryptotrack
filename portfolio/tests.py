@@ -92,6 +92,46 @@ class PortfolioTransactionModelTest(TestCase):
         )
 
 
+class PortfolioTransactionAdminSmokeTest(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="pass"
+        )
+        self.user = User.objects.create_user(username="trader", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        self.transaction = PortfolioTransaction.objects.create(
+            user=self.user,
+            coin=self.coin,
+            type="buy",
+            amount=Decimal("2.5"),
+            price=Decimal("10000"),
+        )
+        self.client.force_login(self.admin_user)
+
+    def test_admin_list_and_view_pages_load(self):
+        response = self.client.get(
+            reverse("admin:portfolio_portfoliotransaction_changelist")
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "trader")
+        self.assertContains(response, "Bitcoin")
+
+        response = self.client.get(
+            reverse(
+                "admin:portfolio_portfoliotransaction_change",
+                args=[self.transaction.pk],
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bitcoin")
+        self.assertContains(response, "Trade date")
+        self.assertNotContains(response, 'name="_save"')
+
+    def test_admin_add_page_is_disabled(self):
+        response = self.client.get(reverse("admin:portfolio_portfoliotransaction_add"))
+        self.assertEqual(response.status_code, 403)
+
+
 class PortfolioViewsTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -518,14 +558,19 @@ class TransactionWorkflowTest(TestCase):
             user=self.user, coin=self.coin, type="buy", amount=2, price=10000
         )
         url = reverse("portfolio:add_transaction", args=[self.coin.id])
-        response = self.client.post(
-            url, {"type": "sell", "amount": "3", "price": "12000"}
-        )
+        with self.assertLogs("portfolio.views", level="WARNING") as logs:
+            response = self.client.post(
+                url, {"type": "sell", "amount": "3", "price": "12000"}
+            )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Insufficient balance")
         self.assertFalse(
             PortfolioTransaction.objects.filter(coin=self.coin, type="sell").exists()
         )
+        self.assertIn("operation=create", logs.output[0])
+        self.assertIn(f"user_id={self.user.id}", logs.output[0])
+        self.assertIn(f"coin_id={self.coin.id}", logs.output[0])
+        self.assertIn("reason=Insufficient balance", logs.output[0])
 
 
 # ---------------------------------------------------------------------------

@@ -166,14 +166,65 @@ are numbered `N.M` (e.g. `11.1`) and completed items are marked ✅.
 
     Goal: make support and data repair possible without violating domain rules.
 
-    - 13.1 Register `Watchlist` in admin with useful filters and search.
-    - 13.2 Decide whether `CoinAdmin` is read-only except `is_active` or supports
-      manual repair with `cg_id` visible.
-    - 13.3 Fix `PortfolioTransactionAdmin` timestamp handling with `readonly_fields`.
-    - 13.4 Decide whether portfolio transactions are immutable audit records.
-    - 13.5 Add admin smoke tests for important add, view, and list pages.
-    - 13.6 Add logging around market API failures, catalog sync, and portfolio domain
-      validation failures.
+    - 13.1 ✅ Register `Watchlist` in admin with useful filters and search.
+      `WatchlistAdmin` in `coins/admin.py`: `list_display` (id, user, `coin__name`,
+      `coin__symbol`, created), `list_filter` (`created`, `coin__is_active` — surfaces
+      watchlist rows on soft-deactivated coins), `search_fields` (username, coin
+      name/symbol), `autocomplete_fields=("user","coin")` for the FK selects, and
+      `readonly_fields=("created",)` since `created` is `auto_now_add` and would raise
+      a form field error in the fieldset otherwise.
+    - 13.2 ✅ Decide whether `CoinAdmin` is read-only except `is_active` or supports
+      manual repair with `cg_id` visible. **Decision: read-only mirror except
+      `is_active`, with `cg_id` visible but read-only.** The `Coin` table mirrors
+      CoinGecko and is rebuilt by `sync_supported_coins`, so `name`/`symbol` edits
+      would be overwritten — kept read-only. `cg_id` (the join key used by
+      `Watchlist`/`PortfolioTransaction`) is surfaced in `list_display`/`search_fields`
+      and the detail form but is **read-only** — editing it would silently orphan
+      related rows. `is_active` stays the sole editable field (human-driven
+      soft-deactivate). `has_add_permission` returns `False`: rows may only originate
+      from the sync command (a hand-added row with a bad `cg_id` is a data-integrity
+      hazard); delete/change stay enabled so `is_active` toggling works.
+    - 13.3 ✅ Fix `PortfolioTransactionAdmin` timestamp handling with `readonly_fields`.
+      The add/detail page was raising `FieldError: 'created' cannot be specified ...
+      as it is a non-editable field` (`created` is `auto_now_add` and sat in
+      `fieldsets` without being in `readonly_fields`; the system check does **not**
+      catch this, but the page 500s). Fixed with `readonly_fields=("created",)`.
+      Also surfaced `trade_date` (added in 11.7 but previously absent from the admin):
+      added to `list_display` (before `created`, matching the app's user-facing
+      "Trade date" vs internal "Entered" split), the detail fieldset (editable), and
+      `list_filter`; added `autocomplete_fields=("user","coin")`. Permission policy
+      left untouched here — owned by 13.4.
+    - 13.4 ✅ Decide whether portfolio transactions are immutable audit records.
+      **Decision (product owner): read-only audit log in the admin.** `has_add_permission`,
+      `has_change_permission`, and `has_delete_permission` all return `False`; the admin
+      can only **view** transactions. Rationale: the admin bypasses `portfolio/ledger.py`,
+      the sole enforcer of the ledger invariants (oversell/FIFO feasibility replay,
+      delisted-buy guard), so any raw admin add/change/delete could silently corrupt the
+      ledger (an admin `sell` over balance, or deleting an early buy that later sells
+      depend on). This resolves the prior incoherence where the admin blocked edits but
+      still allowed invariant-bypassing add/delete. **Admin-layer only:** users keep full
+      *enforced* create/edit/delete through the app (the 11.6 closability ruling); this
+      does not make transactions immutable at the domain level, only via raw admin.
+    - 13.5 ✅ Add admin smoke tests for important add, view, and list pages.
+      Added focused admin smoke tests for the policy settled in 13.1-13.4:
+      `CoinsAdminSmokeTest` covers `Coin` changelist/change pages, verifies only
+      `is_active` is editable on the `Coin` form, confirms `Coin` add is disabled,
+      and covers `Watchlist` changelist/add/change pages. `PortfolioTransactionAdminSmokeTest`
+      covers the read-only audit-log admin: changelist/view pages load, the detail
+      page exposes `trade_date`, save controls are absent, and add is disabled.
+      Verification: `python manage.py test coins.tests.CoinsAdminSmokeTest
+      portfolio.tests.PortfolioTransactionAdminSmokeTest` → 5 passed.
+    - 13.6 ✅ Add logging around market API failures, catalog sync, and portfolio domain
+      validation failures. **Decision: standard-library logging only, no framework or
+      behavior change.** Reused the existing CoinGecko failure helper and enriched it
+      with error subclass and `Retry-After` when present, preserving ERROR for
+      auth/response-contract failures and WARNING+traceback for transient market
+      failures. Catalog sync keeps the existing completion count log and now emits an
+      additional warning when malformed provider rows were skipped. Portfolio ledger
+      rejections are logged at the view catch sites with operation, user id, coin id,
+      cg_id, optional transaction id, and reason, while continuing to return the same
+      form errors/messages to users. Tests pin the command/scheduler failure logs, sync
+      malformed-row warning, and one create-path ledger rejection log.
 
     Verification:
 

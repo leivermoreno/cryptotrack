@@ -87,6 +87,50 @@ class WatchlistModelTest(TestCase):
         self.assertEqual(ids, [coin.cg_id for coin in reversed(coins)])
 
 
+class CoinsAdminSmokeTest(TestCase):
+    def setUp(self):
+        self.admin_user = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="pass"
+        )
+        self.user = User.objects.create_user(username="watcher", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        self.watchlist = Watchlist.objects.create(user=self.user, coin=self.coin)
+        self.client.force_login(self.admin_user)
+
+    def test_coin_admin_list_and_change_pages_load(self):
+        response = self.client.get(reverse("admin:coins_coin_changelist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bitcoin")
+
+        response = self.client.get(
+            reverse("admin:coins_coin_change", args=[self.coin.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "bitcoin")
+        self.assertEqual(list(response.context["adminform"].form.fields), ["is_active"])
+
+    def test_coin_admin_add_page_is_disabled(self):
+        response = self.client.get(reverse("admin:coins_coin_add"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_watchlist_admin_list_add_and_change_pages_load(self):
+        response = self.client.get(reverse("admin:coins_watchlist_changelist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "watcher")
+        self.assertContains(response, "Bitcoin")
+
+        response = self.client.get(reverse("admin:coins_watchlist_add"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Add watchlist")
+
+        response = self.client.get(
+            reverse("admin:coins_watchlist_change", args=[self.watchlist.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "watcher")
+        self.assertContains(response, "Bitcoin")
+
+
 class CoinsViewsTest(TestCase):
     def setUp(self):
         self.client = Client()
@@ -709,6 +753,7 @@ class SyncSupportedCoinsCommandTest(TestCase):
             "created=1 updated=2 deactivated=3 skipped=4 failed=5",
             logs.output[0],
         )
+        self.assertIn("skipped malformed rows: failed=5", logs.output[1])
 
     @patch(
         "coins.management.commands.sync_supported_coins.sync_supported_coins",
@@ -718,10 +763,14 @@ class SyncSupportedCoinsCommandTest(TestCase):
         Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
         before = Coin.objects.count()
 
-        call_command("sync_supported_coins")
+        with self.assertLogs(
+            "coins.management.commands.sync_supported_coins", level="WARNING"
+        ) as logs:
+            call_command("sync_supported_coins")
 
         mock_sync.assert_called_once_with()
         self.assertEqual(Coin.objects.count(), before)
+        self.assertIn("type=CoinGeckoUnavailableError", logs.output[0])
 
 
 class RunapschedulerCommandTest(SimpleTestCase):
@@ -781,6 +830,10 @@ class SchedulerFallbackTest(TransactionTestCase):
         Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
         before = Coin.objects.count()
         # Must not raise: the blocking scheduler stays alive.
-        sync_supported_coins_job()
+        with self.assertLogs(
+            "coins.management.commands.runapscheduler", level="WARNING"
+        ) as logs:
+            sync_supported_coins_job()
         self.assertTrue(mock_sync.called)
         self.assertEqual(Coin.objects.count(), before)
+        self.assertIn("type=CoinGeckoUnavailableError", logs.output[0])

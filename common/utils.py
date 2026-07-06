@@ -29,12 +29,26 @@ def log_coingecko_failure(logger, exc):
     Auth/response failures signal a broken key or a changed API contract and are
     logged at ERROR; transport/server/rate-limit failures are transient and
     logged at WARNING with a traceback. Shared by every catch site (views and
-    the scheduler). Richer logging is step 13.6.
+    the scheduler).
     """
+    error_type = exc.__class__.__name__
+    retry_after = getattr(exc, "retry_after", None)
+    retry_after_text = f" retry_after={retry_after}" if retry_after else ""
     if isinstance(exc, (CoinGeckoAuthError, CoinGeckoResponseError)):
-        logger.error("CoinGecko request failed: %s", exc)
+        logger.error(
+            "CoinGecko request failed type=%s%s: %s",
+            error_type,
+            retry_after_text,
+            exc,
+        )
     else:
-        logger.warning("CoinGecko request failed: %s", exc, exc_info=exc)
+        logger.warning(
+            "CoinGecko request failed type=%s%s: %s",
+            error_type,
+            retry_after_text,
+            exc,
+            exc_info=exc,
+        )
 
 
 def handle_market_unavailable(logger, exc):

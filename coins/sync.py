@@ -23,6 +23,11 @@ def log_sync_result(logger, result):
         result.skipped,
         result.failed,
     )
+    if result.failed:
+        logger.warning(
+            "CoinGecko supported coin sync skipped malformed rows: failed=%s",
+            result.failed,
+        )
 
 
 def _is_blank(value):
