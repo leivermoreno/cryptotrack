@@ -1,4 +1,3 @@
-import unittest
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -15,6 +14,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from coins.exceptions import CoinGeckoUnavailableError
 from coins.models import Coin
 from common.test_utils import make_market_coin, market_response
+from portfolio.forms import PortfolioTransactionForm
 from portfolio.services import build_holdings, get_portfolio_overview_data
 
 from .models import PortfolioTransaction
@@ -74,6 +74,22 @@ class PortfolioTransactionModelTest(TestCase):
         ids = PortfolioTransaction.get_positive_coin_balance_ids(self.user)
         coin_ids = [item["coin_id"] for item in ids]
         self.assertNotIn(self.coin.id, coin_ids)
+
+    def test_meta_indexes_are_the_two_expected_composites(self):
+        # Pin the index set (step 11.8). The (user, coin, created) composite
+        # serves the ledger lock path / build_holdings / balance; (user,
+        # trade_date) serves the default list sort (11.7). Guards against
+        # accidental additions/removals.
+        indexes = {
+            index.name: index.fields for index in PortfolioTransaction._meta.indexes
+        }
+        self.assertEqual(
+            indexes,
+            {
+                "pf_txn_user_coin_created": ["user", "coin", "created"],
+                "pf_txn_user_trade_date": ["user", "trade_date"],
+            },
+        )
 
 
 class PortfolioViewsTest(TestCase):
@@ -160,6 +176,36 @@ class PortfolioViewsTest(TestCase):
         )
         # No P/L summary metric keys were populated.
         self.assertNotIn("portfolio_value", response.context)
+
+    @patch(
+        "portfolio.services.get_coin_list_with_market",
+        return_value=market_response("bitcoin"),
+    )
+    def test_partial_payload_shows_unpriced_row_and_sorts_safely(self, mock_market):
+        # 11.4: a partial payload (some ids missing) is not an error. The
+        # missing holding is rendered as an unpriced row, the view returns 200,
+        # and sorting by a market-derived column (or the default) does not raise
+        # on the None values.
+        self.client.login(username="testuser", password="pass")
+        eth = Coin.objects.create(cg_id="ethereum", name="Ethereum", symbol="ETH")
+        PortfolioTransaction.objects.create(
+            user=self.user, coin=eth, type="buy", amount=1, price=20000
+        )
+        # Default sort (allocation_percentage, desc) must not raise on None.
+        response = self.client.get(reverse("portfolio:overview"))
+        self.assertEqual(response.status_code, 200)
+        symbols = [c["symbol"] for c in response.context["coin_list"]]
+        self.assertIn("ETH", symbols)  # unpriced holding still shown
+        self.assertEqual(response.context["unpriced_count"], 1)
+        self.assertContains(response, "excluded from totals")
+        # Explicit sort by a market-derived column must also be None-safe.
+        response = self.client.get(
+            reverse("portfolio:overview") + "?sort=price&direction=asc"
+        )
+        self.assertEqual(response.status_code, 200)
+        rows = response.context["coin_list"]
+        # Unpriced rows sink to the end regardless of direction.
+        self.assertIsNone(rows[-1]["price"])
 
 
 # ---------------------------------------------------------------------------
@@ -273,11 +319,12 @@ class BuildHoldingsTest(TestCase):
         self.assertEqual(len(lots), 1)
         self.assertEqual(lots[0]["price"], Decimal("20000"))
 
-    @unittest.expectedFailure
     def test_oversold_history_does_not_crash(self):
-        # BUG (inspection/portfolio.md, "Service concerns"): a sell before enough
-        # buy lots makes holdings[...][0] raise IndexError. Step 11.1 should make
-        # build_holdings fail gracefully / return a domain error instead.
+        # Step 11.1: an oversold history (sell exceeding available buy lots) can
+        # exist via raw DB / admin edits or imported history even though the app
+        # blocks it on create. build_holdings clamps: it consumes what lots exist,
+        # drops the un-backed excess, and returns a dict instead of raising
+        # IndexError on the empty deque. The oversold coin ends with no open lots.
         _make_tx(self.user, self.coin, "buy", 1, 10000, created=self.base)
         _make_tx(
             self.user,
@@ -289,6 +336,7 @@ class BuildHoldingsTest(TestCase):
         )
         holdings = build_holdings(self.user, [self.coin.id])
         self.assertIsInstance(holdings, dict)
+        self.assertEqual(list(holdings[self.coin.cg_id]), [])
 
 
 # ---------------------------------------------------------------------------
@@ -310,9 +358,10 @@ class OverviewDataTest(TestCase):
             data = get_portfolio_overview_data(self.user, self.map)
         coin = data["coin_list"][0]
         self.assertEqual(coin["amount"], Decimal("2"))
-        self.assertEqual(coin["value"], Decimal("20000"))  # cost basis
+        self.assertEqual(coin["cost_basis"], Decimal("20000"))
         self.assertEqual(coin["avg_buy_price"], Decimal("10000"))
         self.assertEqual(coin["price"], Decimal("15000"))
+        self.assertEqual(coin["market_value"], Decimal("30000"))
         self.assertEqual(coin["upl"], Decimal("10000"))
         self.assertEqual(coin["upl_percentage"], Decimal("50"))
         self.assertEqual(coin["allocation_percentage"], Decimal("100"))
@@ -321,24 +370,93 @@ class OverviewDataTest(TestCase):
         self.assertEqual(metrics["portfolio_value"], Decimal("30000"))
         self.assertEqual(metrics["portfolio_upl"], Decimal("10000"))
 
-    def test_holding_missing_from_market_is_dropped(self):
-        # CURRENT behavior: a positive-balance coin absent from the market
-        # response silently disappears from the overview. Step 11.4 should stop
-        # dropping holdings silently; characterized green here as today's contract.
+    def test_holding_missing_from_market_is_shown_unpriced(self):
+        # 11.4: a positive-balance coin absent from the market response is no
+        # longer silently dropped. It is shown with its ledger facts (amount,
+        # cost_basis, avg_buy_price) intact and the market-derived fields as
+        # None; name/symbol come from the Coin table.
         with patch("portfolio.services.get_coin_list_with_market", return_value=[]):
             data = get_portfolio_overview_data(self.user, self.map)
-        self.assertEqual(data["coin_list"], [])
+        self.assertEqual(len(data["coin_list"]), 1)
+        coin = data["coin_list"][0]
+        # Name/symbol sourced from the Coin table (not the market payload).
+        self.assertEqual(coin["name"], "Bitcoin")
+        self.assertEqual(coin["symbol"], "BTC")
+        # Ledger-derived facts survive.
+        self.assertEqual(coin["amount"], Decimal("2"))
+        self.assertEqual(coin["cost_basis"], Decimal("20000"))
+        self.assertEqual(coin["avg_buy_price"], Decimal("10000"))
+        # Market-derived fields are unavailable.
+        self.assertIsNone(coin["price"])
+        self.assertIsNone(coin["market_value"])
+        self.assertIsNone(coin["upl"])
+        self.assertIsNone(coin["upl_percentage"])
+        self.assertIsNone(coin["allocation_percentage"])
+        # The unpriced holding is excluded from all totals (Option C) and
+        # surfaced via unpriced_count.
+        metrics = data["portfolio_metrics"]
+        self.assertEqual(metrics["total_invested"], 0)
+        self.assertEqual(metrics["portfolio_value"], 0)
+        self.assertEqual(metrics["portfolio_upl"], 0)
+        self.assertEqual(metrics["unpriced_count"], 1)
 
-    @unittest.expectedFailure
+    def test_mixed_priced_and_unpriced_totals_cover_priced_only(self):
+        # 11.4 Option C: totals sum only over priced holdings so they stay
+        # internally consistent; the unpriced holding is excluded and counted.
+        eth = Coin.objects.create(cg_id="ethereum", name="Ethereum", symbol="ETH")
+        PortfolioTransaction.objects.create(
+            user=self.user, coin=eth, type="buy", amount=3, price=1000
+        )
+        id_map = {
+            self.coin.cg_id: self.coin.id,
+            eth.cg_id: eth.id,
+        }
+        # Only bitcoin is priced (buy 2 @ 10000, price 15000); ethereum missing.
+        market = [make_market_coin("bitcoin", current_price=15000.0)]
+        with patch("portfolio.services.get_coin_list_with_market", return_value=market):
+            data = get_portfolio_overview_data(self.user, id_map)
+
+        # Key by name: priced rows keep the market payload's fields, unpriced
+        # rows source name/symbol from the Coin table.
+        rows = {c["name"]: c for c in data["coin_list"]}
+        self.assertEqual(len(rows), 2)
+        # Priced bitcoin: full allocation since it is the only valued holding.
+        self.assertEqual(rows["Bitcoin"]["allocation_percentage"], Decimal("100"))
+        # Unpriced ethereum: shown, no market values.
+        self.assertIsNone(rows["Ethereum"]["market_value"])
+        self.assertIsNone(rows["Ethereum"]["allocation_percentage"])
+        # ETH cost basis is present on its row but excluded from totals.
+        self.assertEqual(rows["Ethereum"]["cost_basis"], Decimal("3000"))
+
+        metrics = data["portfolio_metrics"]
+        self.assertEqual(metrics["total_invested"], Decimal("20000"))
+        self.assertEqual(metrics["portfolio_value"], Decimal("30000"))
+        self.assertEqual(metrics["portfolio_upl"], Decimal("10000"))
+        self.assertEqual(metrics["unpriced_count"], 1)
+
     def test_zero_prices_do_not_divide_by_zero(self):
-        # BUG (inspection/portfolio.md): allocation_percentage divides by
-        # portfolio_value; if every current price is 0 the portfolio value is 0
-        # and the division raises. Step 11.5 should guard against zero/unknown
-        # prices.
+        # 11.5: a coin PRESENT in the market payload with current_price == 0 is a
+        # real value (not missing), so it stays on the priced path: market_value 0,
+        # a full unrealized loss, included in totals. When it's the only holding,
+        # portfolio_value == 0, so allocation is 0/0 — guarded to 0% (not "-",
+        # which is reserved for unpriced rows).
         market = [make_market_coin("bitcoin", current_price=0.0)]
         with patch("portfolio.services.get_coin_list_with_market", return_value=market):
             data = get_portfolio_overview_data(self.user, self.map)
-        self.assertIsInstance(data["coin_list"], list)
+
+        coin = data["coin_list"][0]
+        self.assertEqual(coin["price"], Decimal("0"))
+        self.assertEqual(coin["market_value"], Decimal("0"))
+        self.assertEqual(coin["upl"], Decimal("-20000"))
+        self.assertEqual(coin["upl_percentage"], Decimal("-100"))
+        self.assertEqual(coin["allocation_percentage"], Decimal("0"))
+
+        metrics = data["portfolio_metrics"]
+        self.assertEqual(metrics["total_invested"], Decimal("20000"))
+        self.assertEqual(metrics["portfolio_value"], Decimal("0"))
+        self.assertEqual(metrics["portfolio_upl"], Decimal("-20000"))
+        self.assertEqual(metrics["portfolio_upl_percentage"], Decimal("-100"))
+        self.assertEqual(metrics["unpriced_count"], 0)  # priced, not unpriced
 
 
 # ---------------------------------------------------------------------------
@@ -866,3 +984,263 @@ class LedgerLockingTest(TestCase):
             )
         sql = " ".join(q["sql"].lower() for q in ctx.captured_queries)
         self.assertIn("for update of", sql)
+
+
+# ---------------------------------------------------------------------------
+# 11.6 — delisted (is_active=False) coins: visible read-only + closable,
+# but no new/increased buys (Option C).
+# ---------------------------------------------------------------------------
+class DelistedCoinTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="dl", password="pass")
+        # A coin the user holds that is later delisted from CoinGecko.
+        self.coin = Coin.objects.create(
+            cg_id="deadcoin", name="Dead Coin", symbol="DEAD", is_active=False
+        )
+        PortfolioTransaction.objects.create(
+            user=self.user, coin=self.coin, type="buy", amount=2, price=100
+        )
+        self.client.login(username="dl", password="pass")
+
+    def _add_url(self):
+        return reverse("portfolio:add_transaction", args=[self.coin.id])
+
+    # (a) overview: shown unpriced + badged, excluded from totals -----------
+    def test_inactive_holding_shown_unpriced_and_badged(self):
+        id_map = {self.coin.cg_id: self.coin.id}
+        # A delisted coin is absent from the market payload.
+        with patch("portfolio.services.get_coin_list_with_market", return_value=[]):
+            data = get_portfolio_overview_data(self.user, id_map)
+        self.assertEqual(len(data["coin_list"]), 1)
+        row = data["coin_list"][0]
+        # Ledger facts survive; row is flagged delisted; market fields are None.
+        self.assertFalse(row["is_active"])
+        self.assertEqual(row["amount"], Decimal("2"))
+        self.assertEqual(row["cost_basis"], Decimal("200"))
+        self.assertIsNone(row["price"])
+        self.assertIsNone(row["market_value"])
+        # Excluded from totals, counted as unpriced.
+        metrics = data["portfolio_metrics"]
+        self.assertEqual(metrics["portfolio_value"], 0)
+        self.assertEqual(metrics["unpriced_count"], 1)
+
+    def test_overview_renders_delisted_badge(self):
+        with patch("portfolio.services.get_coin_list_with_market", return_value=[]):
+            response = self.client.get(reverse("portfolio:overview"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Delisted")
+
+    # (b) all-transactions: inactive-coin rows appear -----------------------
+    def test_inactive_coin_transactions_appear_in_all_transactions(self):
+        txs = PortfolioTransaction.get_for_user(self.user)
+        self.assertEqual(txs.count(), 1)
+        response = self.client.get(reverse("portfolio:all_transactions"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Dead Coin")
+        self.assertContains(response, "Delisted")
+
+    # (f) per-coin page renders 200 for an inactive coin --------------------
+    def test_per_coin_page_renders_for_inactive_coin(self):
+        response = self.client.get(self._add_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "portfolio/create_transaction.html")
+        self.assertContains(response, "Dead Coin")
+
+    # (c) new buy blocked (create AND edit-to-buy) --------------------------
+    def test_new_buy_on_inactive_coin_is_blocked(self):
+        response = self.client.post(
+            self._add_url(), {"type": "buy", "amount": "1", "price": "100"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "delisted")
+        self.assertFalse(
+            PortfolioTransaction.objects.filter(
+                coin=self.coin, type="buy", amount=1
+            ).exists()
+        )
+
+    def test_edit_sell_to_buy_on_inactive_coin_is_blocked(self):
+        # Give the user a sell to edit (buy 2 already exists -> balance 2).
+        sell = PortfolioTransaction.objects.create(
+            user=self.user, coin=self.coin, type="sell", amount=1, price=120
+        )
+        url = reverse("portfolio:edit_transaction", args=[self.coin.id, sell.id])
+        response = self.client.post(url, {"type": "buy", "amount": "1", "price": "120"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "delisted")
+        sell.refresh_from_db()
+        self.assertEqual(sell.type, "sell")
+
+    def test_increase_existing_buy_on_inactive_coin_is_blocked(self):
+        tx = PortfolioTransaction.objects.get(coin=self.coin, type="buy")
+        url = reverse("portfolio:edit_transaction", args=[self.coin.id, tx.id])
+        response = self.client.post(url, {"type": "buy", "amount": "5", "price": "100"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "delisted")
+        tx.refresh_from_db()
+        self.assertEqual(tx.amount, Decimal("2"))
+
+    # ALLOW: price-only / reducing edits of an existing buy -----------------
+    def test_reduce_or_reprice_existing_buy_on_inactive_coin_is_allowed(self):
+        tx = PortfolioTransaction.objects.get(coin=self.coin, type="buy")
+        url = reverse("portfolio:edit_transaction", args=[self.coin.id, tx.id])
+        # Same amount, new price (correction) -> allowed.
+        response = self.client.post(url, {"type": "buy", "amount": "2", "price": "150"})
+        self.assertEqual(response.status_code, 302)
+        tx.refresh_from_db()
+        self.assertEqual(tx.price, Decimal("150"))
+        self.assertEqual(tx.amount, Decimal("2"))
+
+    # (d) sell allowed and closes the position ------------------------------
+    def test_sell_on_inactive_coin_closes_position(self):
+        response = self.client.post(
+            self._add_url(), {"type": "sell", "amount": "2", "price": "80"}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            PortfolioTransaction.get_coin_balance(self.user, self.coin), Decimal("0")
+        )
+        # A fully-closed delisted position drops off the overview map.
+        ids = PortfolioTransaction.get_positive_coin_balance_ids(self.user)
+        self.assertNotIn(self.coin.id, [item["coin_id"] for item in ids])
+
+    # (e) delete allowed ----------------------------------------------------
+    def test_delete_transaction_on_inactive_coin_is_allowed(self):
+        tx = PortfolioTransaction.objects.get(coin=self.coin, type="buy")
+        url = reverse("portfolio:delete_transaction", args=[self.coin.id, tx.id])
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(PortfolioTransaction.objects.filter(pk=tx.pk).exists())
+
+    # model/ledger reads see the delisted ledger ----------------------------
+    def test_get_coin_balance_counts_inactive_coin(self):
+        self.assertEqual(
+            PortfolioTransaction.get_coin_balance(self.user, self.coin), Decimal("2")
+        )
+
+    def test_sell_feasibility_uses_real_inactive_ledger(self):
+        # Selling more than held on a delisted coin is still rejected via replay.
+        response = self.client.post(
+            self._add_url(), {"type": "sell", "amount": "3", "price": "80"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Insufficient balance")
+        self.assertFalse(
+            PortfolioTransaction.objects.filter(coin=self.coin, type="sell").exists()
+        )
+
+
+# ---------------------------------------------------------------------------
+# 11.7 — user-entered trade_date (display-only, date-only; ledger untouched)
+# ---------------------------------------------------------------------------
+class TradeDateTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="td", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        self.client.login(username="td", password="pass")
+
+    def _add_url(self):
+        return reverse("portfolio:add_transaction", args=[self.coin.id])
+
+    def test_model_default_fills_trade_date_today(self):
+        # A row created without an explicit trade_date gets today's date (the
+        # model default) -- mirrors what the backfill guarantees for old rows.
+        tx = PortfolioTransaction.objects.create(
+            user=self.user, coin=self.coin, type="buy", amount=1, price=100
+        )
+        self.assertEqual(tx.trade_date, timezone.localdate())
+
+    def test_create_form_persists_trade_date(self):
+        past = timezone.localdate() - timedelta(days=10)
+        response = self.client.post(
+            self._add_url(),
+            {
+                "type": "buy",
+                "amount": "2",
+                "price": "10000",
+                "trade_date": past.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        tx = PortfolioTransaction.objects.get(user=self.user, coin=self.coin)
+        self.assertEqual(tx.trade_date, past)
+
+    def test_trade_date_renders_in_transaction_list(self):
+        past = timezone.localdate() - timedelta(days=5)
+        _make_tx(self.user, self.coin, "buy", 1, 100)
+        PortfolioTransaction.objects.filter(user=self.user).update(trade_date=past)
+        response = self.client.get(self._add_url())
+        self.assertContains(response, past.strftime("%m-%d-%y"))
+
+    def test_future_trade_date_is_rejected(self):
+        future = timezone.localdate() + timedelta(days=1)
+        response = self.client.post(
+            self._add_url(),
+            {
+                "type": "buy",
+                "amount": "1",
+                "price": "100",
+                "trade_date": future.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Trade date cannot be in the future.")
+        self.assertFalse(PortfolioTransaction.objects.filter(user=self.user).exists())
+
+    def test_unbound_create_form_defaults_to_today(self):
+        form = PortfolioTransactionForm()
+        self.assertEqual(form.fields["trade_date"].initial, timezone.localdate())
+
+    def test_omitted_trade_date_falls_back_to_today(self):
+        # A bare buy/sell POST (no trade_date) still works and defaults to today.
+        response = self.client.post(
+            self._add_url(), {"type": "buy", "amount": "1", "price": "100"}
+        )
+        self.assertEqual(response.status_code, 302)
+        tx = PortfolioTransaction.objects.get(user=self.user, coin=self.coin)
+        self.assertEqual(tx.trade_date, timezone.localdate())
+
+    def test_edit_form_shows_and_updates_trade_date(self):
+        tx = _make_tx(self.user, self.coin, "buy", 2, 10000)
+        url = reverse("portfolio:edit_transaction", args=[self.coin.id, tx.id])
+        # Existing value is rendered on the edit form.
+        self.assertContains(self.client.get(url), timezone.localdate().isoformat())
+        new_date = timezone.localdate() - timedelta(days=3)
+        response = self.client.post(
+            url,
+            {
+                "type": "buy",
+                "amount": "2",
+                "price": "10000",
+                "trade_date": new_date.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        tx.refresh_from_db()
+        self.assertEqual(tx.trade_date, new_date)
+
+    def test_migration_backfill_uses_created_date(self):
+        # Exercise the 0004 data migration's backfill directly: a row whose
+        # trade_date is NULL is filled from the local date of `created`, not
+        # today -- so historical (created, id) order is preserved.
+        import importlib
+
+        mig = importlib.import_module(
+            "portfolio.migrations.0004_portfoliotransaction_trade_date"
+        )
+
+        # The test DB already has the migrated (non-null) schema, so we can't
+        # insert a NULL trade_date. Instead give the row today's default and
+        # confirm the backfill overwrites it with the local date of `created`.
+        created_at = timezone.now() - timedelta(days=400)
+        tx = _make_tx(self.user, self.coin, "buy", 1, 100, created=created_at)
+        self.assertEqual(tx.trade_date, timezone.localdate())
+
+        class _Apps:
+            def get_model(self, app_label, model_name):
+                return PortfolioTransaction
+
+        mig.backfill_trade_date_from_created(_Apps(), None)
+        tx.refresh_from_db()
+        self.assertEqual(tx.trade_date, timezone.localtime(created_at).date())
+        self.assertNotEqual(tx.trade_date, timezone.localdate())

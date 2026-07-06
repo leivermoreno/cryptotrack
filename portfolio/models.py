@@ -5,6 +5,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Case, F, Q, Sum, When
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 from coins.models import Coin
 
@@ -24,6 +25,13 @@ class PortfolioTransaction(models.Model):
         validators=[MinValueValidator(Decimal("0.00000001"))],
     )
     created = models.DateTimeField(auto_now_add=True)
+    # User-entered trade date (display-only, date-only). Distinct from the auto
+    # `created` insert timestamp: `created` remains the single authoritative key
+    # for FIFO/ledger ordering (see build_holdings / portfolio.ledger, step 10.8);
+    # trade_date is surfaced/sorted in the transaction lists only. Step 11.7
+    # (Option B). Defaults to today for new rows; existing rows were backfilled
+    # from the date of `created`.
+    trade_date = models.DateField(default=timezone.localdate)
 
     class Meta:
         constraints = [
@@ -36,11 +44,32 @@ class PortfolioTransaction(models.Model):
                 name="portfolio_transaction_price_gt_0",
             ),
         ]
+        indexes = [
+            # Workhorse composite: equality on (user, coin) then the trailing
+            # `created` FIFO key. Serves the ledger FOR UPDATE lock path
+            # (portfolio.ledger._locked_rows), build_holdings (user + coin_id__in),
+            # and get_coin_balance / per-coin transaction lists via the (user, coin)
+            # prefix. Trailing col is `created` — the FIFO-authoritative order key
+            # (see the trade_date note above), NOT trade_date.
+            models.Index(
+                fields=["user", "coin", "created"],
+                name="pf_txn_user_coin_created",
+            ),
+            # Default ordering of the transaction lists. Step 11.7 changed
+            # DEFAULT_SORT to `trade_date`, so this indexes (user, trade_date)
+            # rather than the task's literal (user, created) suggestion — the
+            # divergence is intentional and traceable to the 11.7 default-sort
+            # change.
+            models.Index(
+                fields=["user", "trade_date"],
+                name="pf_txn_user_trade_date",
+            ),
+        ]
 
     @staticmethod
     def get_for_user(user):
         return (
-            PortfolioTransaction.objects.filter(user=user, coin__is_active=True)
+            PortfolioTransaction.objects.filter(user=user)
             .annotate(
                 total=F("amount") * F("price"),
             )
@@ -49,9 +78,7 @@ class PortfolioTransaction(models.Model):
 
     @staticmethod
     def get_coin_balance(user, coin):
-        balance = PortfolioTransaction.objects.filter(
-            user=user, coin=coin, coin__is_active=True
-        ).aggregate(
+        balance = PortfolioTransaction.objects.filter(user=user, coin=coin).aggregate(
             amount_sum=Coalesce(
                 Sum(
                     Case(
@@ -68,7 +95,7 @@ class PortfolioTransaction(models.Model):
     @staticmethod
     def get_positive_coin_balance_ids(user):
         return (
-            PortfolioTransaction.objects.filter(user=user, coin__is_active=True)
+            PortfolioTransaction.objects.filter(user=user)
             .values(
                 "coin",
             )

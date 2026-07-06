@@ -12,7 +12,8 @@
             <th>{% sort_link 'amount' page_obj.number sort direction search 'Amount' %}</th>
             <th>{% sort_link 'price' page_obj.number sort direction search 'Price per coin' %}</th>
             <th>{% sort_link 'total' page_obj.number sort direction search 'Total value' %}</th>
-            <th>{% sort_link 'created' page_obj.number sort direction search 'Date' %}</th>
+            <th>{% sort_link 'trade_date' page_obj.number sort direction search 'Trade date' %}</th>
+            <th>{% sort_link 'created' page_obj.number sort direction search 'Entered' %}</th>
             <th>Actions</th>
         </tr>
         </thead>
@@ -22,11 +23,12 @@
                 <th>{{ forloop.counter }}</th>
                 <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>
                 {% if show_coin_name %}
-                    <td>{{ tx.coin.name }} - <span class="fw-bold text-primary">{{ tx.coin.symbol }}</span></td>
+                    <td>{{ tx.coin.name }} - <span class="fw-bold text-primary">{{ tx.coin.symbol }}</span>{% if not tx.coin.is_active %} <span class="badge bg-secondary">Delisted</span>{% endif %}</td>
                 {% endif %}
                 <td>{{ tx.amount|format_number|default:'-' }}</td>
                 <td>{{ tx.price|format_amount }}</td>
                 <td>{{ tx.total|format_amount }}</td>
+                <td>{{ tx.trade_date|date:"m-d-y" }}</td>
                 <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
                 <td class="d-flex justify-content-evenly">
                     <a href="{% url 'portfolio:edit_transaction' tx.coin.id tx.id %}"

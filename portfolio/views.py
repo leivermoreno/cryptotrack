@@ -62,7 +62,14 @@ def portfolio_overview(request):
         )
         coin_list = portfolio_overview_data["coin_list"]
         portfolio_metrics = portfolio_overview_data["portfolio_metrics"]
-        coin_list.sort(key=lambda x: x[sort], reverse=(direction == "desc"))
+        # None-safe sort: unpriced holdings carry None in the market-derived
+        # columns, which cannot be compared against Decimal. Partition first so
+        # None never reaches the comparison, then always append unpriced rows to
+        # the end regardless of sort direction.
+        priced_rows = [c for c in coin_list if c[sort] is not None]
+        unpriced_rows = [c for c in coin_list if c[sort] is None]
+        priced_rows.sort(key=lambda x: x[sort], reverse=(direction == "desc"))
+        coin_list = priced_rows + unpriced_rows
         context.update(
             {
                 "coin_list": coin_list,
@@ -72,6 +79,7 @@ def portfolio_overview(request):
                 "portfolio_upl_percentage": portfolio_metrics[
                     "portfolio_upl_percentage"
                 ],
+                "unpriced_count": portfolio_metrics["unpriced_count"],
             }
         )
     except CoinGeckoError as exc:
@@ -112,7 +120,10 @@ def create_portfolio_transaction(
     request, coin_id=None, cg_id=None, transaction_id=None
 ):
     try:
-        coin = Coin.objects.filter(is_active=True)
+        # Delisted (is_active=False) coins still resolve here: the per-coin page
+        # renders history + balance read-only, and mutation permission is
+        # enforced in the ledger (buys blocked, sells/deletes allowed) — 11.6.
+        coin = Coin.objects.all()
         if coin_id:
             coin = coin.get(id=coin_id)
         else:
@@ -142,6 +153,7 @@ def create_portfolio_transaction(
                         type=form.cleaned_data["type"],
                         amount=form.cleaned_data["amount"],
                         price=form.cleaned_data["price"],
+                        trade_date=form.cleaned_data["trade_date"],
                     )
                 else:
                     create_transaction(
@@ -150,6 +162,7 @@ def create_portfolio_transaction(
                         type=form.cleaned_data["type"],
                         amount=form.cleaned_data["amount"],
                         price=form.cleaned_data["price"],
+                        trade_date=form.cleaned_data["trade_date"],
                     )
             except LedgerError as exc:
                 form.add_error("amount", str(exc))
@@ -178,7 +191,7 @@ def create_portfolio_transaction(
 @require_POST
 def delete_portfolio_transaction(request, coin_id, transaction_id):
     try:
-        coin = Coin.objects.get(id=coin_id, is_active=True)
+        coin = Coin.objects.get(id=coin_id)
         transaction = PortfolioTransaction.objects.get(
             pk=transaction_id, user=request.user, coin=coin
         )

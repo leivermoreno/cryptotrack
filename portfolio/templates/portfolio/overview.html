@@ -25,6 +25,11 @@
             </div>
         </div>
         {% endif %}
+        {% if unpriced_count %}
+            <div class="alert alert-warning my-3">
+                {{ unpriced_count }} holding{{ unpriced_count|pluralize }} excluded from totals &mdash; no current market price.
+            </div>
+        {% endif %}
         <a href="{% url 'portfolio:all_transactions' %}" class="btn btn-primary">See all transactions</a>
 
         {% if market_unavailable %}
@@ -37,7 +42,8 @@
                 <th>{% sort_link 'price' 1 sort direction search 'Price' %}</th>
                 <th>{% sort_link 'avg_buy_price' 1 sort direction search 'Avg buy price' %}</th>
                 <th>{% sort_link 'amount' 1 sort direction search 'Amount' %}</th>
-                <th>{% sort_link 'value' 1 sort direction search 'Value' %}</th>
+                <th>{% sort_link 'cost_basis' 1 sort direction search 'Cost basis' %}</th>
+                <th>{% sort_link 'market_value' 1 sort direction search 'Market value' %}</th>
                 <th>{% sort_link 'upl' 1 sort direction search 'UPL' %}</th>
                 <th>{% sort_link 'allocation_percentage' 1 sort direction search 'Allocation' %}</th>
                 <th>Actions</th>
@@ -47,11 +53,12 @@
             <tbody>
             {% for coin in coin_list %}
                 <tr>
-                    <td class="text-start">{{ coin.name }} - <span class="text-primary">{{ coin.symbol }}</span></td>
+                    <td class="text-start">{{ coin.name }} - <span class="text-primary">{{ coin.symbol }}</span>{% if not coin.is_active %} <span class="badge bg-secondary">Delisted</span>{% endif %}</td>
                     <td>{{ coin.price|format_amount}}</td>
                     <td>{{ coin.avg_buy_price|format_amount }}</td>
                     <td>{{ coin.amount|format_number }}</td>
-                    <td>{{ coin.value|format_amount }}</td>
+                    <td>{{ coin.cost_basis|format_amount }}</td>
+                    <td>{{ coin.market_value|format_amount }}</td>
                     <td>{{ coin.upl|format_amount }} <span class="small {{ coin.upl_percentage|percentage_change_class }}">{{ coin.upl_percentage|format_percentage }}</span></td>
                     <td>{{ coin.allocation_percentage|format_percentage }}</td>
                     <td>

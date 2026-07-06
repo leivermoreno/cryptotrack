@@ -4,7 +4,7 @@
 {% block content %}
     <div class="container">
         <h1 class="my-3">{% block title %}{% if transaction %}Edit{% else %}Create{% endif %} Transaction{% endblock %}
-            for {{ coin.name }}</h1>
+            for {{ coin.name }}{% if not coin.is_active %} <span class="badge bg-secondary align-middle">Delisted</span>{% endif %}</h1>
         <div class="d-flex flex-column align-items-center">
             <div class="alert alert-info mb-3">
                 <strong>Available balance:</strong> {{ balance|floatformat }}
