@@ -214,7 +214,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # (which assume accounts are mounted at /accounts/ and land logins on the
 # nonexistent /accounts/profile/). Named URLs survive changes to URL prefixes.
 
-LOGIN_URL = "login"
+LOGIN_URL = "accounts:login"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 

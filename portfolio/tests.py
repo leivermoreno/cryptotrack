@@ -3,7 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -16,6 +16,8 @@ from common.test_utils import make_market_coin, market_response
 from portfolio.services import build_holdings, get_portfolio_overview_data
 
 from .models import PortfolioTransaction
+
+User = get_user_model()
 
 
 def _make_tx(user, coin, type, amount, price, created=None):
@@ -107,7 +109,7 @@ class PortfolioViewsTest(TestCase):
     def test_portfolio_overview_unauthenticated(self):
         url = reverse("portfolio:overview")
         response = self.client.get(url)
-        self.assertRedirects(response, reverse("login", query={"next": url}))
+        self.assertRedirects(response, reverse("accounts:login", query={"next": url}))
 
     @patch("portfolio.services.get_coin_list_with_market", return_value=[])
     def test_portfolio_overview_no_transactions(self, mock_market):

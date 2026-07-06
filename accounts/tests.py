@@ -17,14 +17,14 @@ class LoginViewTest(TestCase):
 
     def test_login_get_renders_template(self):
         """GET login returns 200 and uses registration/login.html."""
-        response = self.client.get(reverse("login"))
+        response = self.client.get(reverse("accounts:login"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "registration/login.html")
 
     def test_login_post_valid_authenticates_and_redirects(self):
         """Valid credentials log the user in and redirect to LOGIN_REDIRECT_URL."""
         response = self.client.post(
-            reverse("login"),
+            reverse("accounts:login"),
             {"username": "alice", "password": STRONG_PASSWORD},
         )
         self.assertRedirects(
@@ -37,7 +37,7 @@ class LoginViewTest(TestCase):
     def test_login_post_invalid_rerenders_with_error(self):
         """Bad credentials re-render (200), user stays anonymous, form has errors."""
         response = self.client.post(
-            reverse("login"),
+            reverse("accounts:login"),
             {"username": "alice", "password": "wrong-password"},
         )
         self.assertEqual(response.status_code, 200)
@@ -49,7 +49,7 @@ class LoginViewTest(TestCase):
         """Logging in from a protected page redirects to the next target."""
         next_url = reverse("coins:watchlist")
         response = self.client.post(
-            reverse("login"),
+            reverse("accounts:login"),
             {"username": "alice", "password": STRONG_PASSWORD, "next": next_url},
         )
         self.assertRedirects(response, next_url, fetch_redirect_response=False)
@@ -57,7 +57,7 @@ class LoginViewTest(TestCase):
     def test_authenticated_user_redirected_away_from_login(self):
         """redirect_authenticated_user=True sends logged-in users off the login page."""
         self.client.force_login(self.user)
-        response = self.client.get(reverse("login"))
+        response = self.client.get(reverse("accounts:login"))
         self.assertRedirects(
             response,
             settings.LOGIN_REDIRECT_URL,
@@ -71,7 +71,7 @@ class RegisterViewTest(TestCase):
 
     def test_register_get_renders_template(self):
         """GET register returns 200 and uses registration/register.html."""
-        response = self.client.get(reverse("register"))
+        response = self.client.get(reverse("accounts:register"))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "registration/register.html")
 
@@ -83,14 +83,16 @@ class RegisterViewTest(TestCase):
         deferred enhancement (Section 14), not a bug.
         """
         response = self.client.post(
-            reverse("register"),
+            reverse("accounts:register"),
             {
                 "username": "newuser",
                 "password1": STRONG_PASSWORD,
                 "password2": STRONG_PASSWORD,
             },
         )
-        self.assertRedirects(response, reverse("login"), fetch_redirect_response=False)
+        self.assertRedirects(
+            response, reverse("accounts:login"), fetch_redirect_response=False
+        )
         self.assertTrue(User.objects.filter(username="newuser").exists())
         # Client is not authenticated after registration (current behavior).
         self.assertNotIn("_auth_user_id", self.client.session)
@@ -98,7 +100,7 @@ class RegisterViewTest(TestCase):
     def test_register_post_invalid_rerenders_and_creates_no_user(self):
         """Mismatched passwords re-render with errors and create no user."""
         response = self.client.post(
-            reverse("register"),
+            reverse("accounts:register"),
             {
                 "username": "newuser",
                 "password1": STRONG_PASSWORD,
@@ -114,7 +116,7 @@ class RegisterViewTest(TestCase):
         """Authenticated users visiting register are redirected to coins:index."""
         user = User.objects.create_user(username="bob", password=STRONG_PASSWORD)
         self.client.force_login(user)
-        response = self.client.get(reverse("register"))
+        response = self.client.get(reverse("accounts:register"))
         self.assertRedirects(
             response, reverse("coins:index"), fetch_redirect_response=False
         )
@@ -130,7 +132,7 @@ class LogoutViewTest(TestCase):
         self.client.force_login(self.user)
         self.assertIn("_auth_user_id", self.client.session)
 
-        response = self.client.post(reverse("logout"))
+        response = self.client.post(reverse("accounts:logout"))
         self.assertRedirects(
             response,
             settings.LOGOUT_REDIRECT_URL,
@@ -153,10 +155,10 @@ class NavbarAuthStateTest(TestCase):
         self.user = User.objects.create_user(username="dave", password=STRONG_PASSWORD)
 
     def test_anonymous_navbar_shows_login_and_register(self):
-        response = self.client.get(reverse("login"))
+        response = self.client.get(reverse("accounts:login"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("login"))
-        self.assertContains(response, reverse("register"))
+        self.assertContains(response, reverse("accounts:login"))
+        self.assertContains(response, reverse("accounts:register"))
 
     def test_authenticated_navbar_shows_logout_and_app_links(self):
         """An authed rendered page exposes Logout, Watchlist, and Portfolio links."""
@@ -175,6 +177,13 @@ class NavbarAuthStateTest(TestCase):
             response = self.client.get(reverse("coins:index"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("logout"))
+        self.assertContains(response, reverse("accounts:logout"))
         self.assertContains(response, reverse("coins:watchlist"))
         self.assertContains(response, reverse("portfolio:overview"))
+
+
+class AccountUrlCompatibilityTest(TestCase):
+    def test_global_auth_url_aliases_still_resolve(self):
+        self.assertEqual(reverse("login"), reverse("accounts:login"))
+        self.assertEqual(reverse("logout"), reverse("accounts:logout"))
+        self.assertEqual(reverse("register"), reverse("accounts:register"))

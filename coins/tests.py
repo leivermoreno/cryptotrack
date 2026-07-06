@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import IntegrityError
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase
@@ -21,6 +21,8 @@ from coins.sync import SupportedCoinSyncResult, sync_supported_coins
 from common.test_utils import make_market_coin, market_response
 
 from .models import Coin, Watchlist
+
+User = get_user_model()
 
 # Single user-facing copy for a CoinGecko whole-call failure (5.6).
 MARKET_UNAVAILABLE_COPY = (
@@ -134,7 +136,7 @@ class CoinsViewsTest(TestCase):
         url = reverse("coins:add_remove_to_watchlist", args=[self.coin.cg_id])
         response = self.client.post(url)
         self.assertRedirects(
-            response, expected_url=reverse("login", query={"next": url})
+            response, expected_url=reverse("accounts:login", query={"next": url})
         )
 
     @patch(
@@ -156,7 +158,7 @@ class CoinsViewsTest(TestCase):
         url = reverse("coins:watchlist")
         response = self.client.get(url)
         self.assertRedirects(
-            response, expected_url=reverse("login", query={"next": url})
+            response, expected_url=reverse("accounts:login", query={"next": url})
         )
 
 

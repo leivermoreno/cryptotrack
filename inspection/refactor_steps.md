@@ -268,15 +268,48 @@ sections keep their full task lists.
    Goal: avoid painful migrations after more account and ownership features are
    added.
 
-   - 9.1 Decide whether this app will ever need a custom user model. If yes, plan
-     that migration explicitly before adding profile data.
-   - 9.2 In the near term, replace direct `django.contrib.auth.models.User` model
-     references with `settings.AUTH_USER_MODEL`.
-   - 9.3 Use `get_user_model()` in tests and runtime code that needs the concrete
-     class.
-   - 9.4 Document deletion behavior for users, watchlist rows, and portfolio history.
-   - 9.5 Decide whether account URLs should stay global or gain an `accounts`
-     namespace with compatibility aliases.
+   - 9.1 ✅ Decision: keep Django's default `auth.User` for this app. Current needs
+     are stock username/password auth plus ownership links; future
+     profile/preferences data should use a separate
+     `OneToOneField(settings.AUTH_USER_MODEL)` profile model. Reopen only if
+     identity itself must change (email-as-login, custom identifier, custom auth
+     lifecycle). A later custom-user switch would be a manual mid-project
+     migration: create the custom user in its app's `0001_initial`, copy
+     `auth_user` data, and repoint dependent FKs/M2Ms such as watchlist and
+     portfolio rows.
+   - 9.2 ✅ Decision/solution: replaced the two direct model-field references to
+     `django.contrib.auth.models.User` with `settings.AUTH_USER_MODEL`
+     (`coins.Watchlist.user` and `portfolio.PortfolioTransaction.user`). No
+     migration was generated: the initial migrations already use
+     `migrations.swappable_dependency(settings.AUTH_USER_MODEL)` and serialize both
+     user FKs as `to=settings.AUTH_USER_MODEL`, so Django sees this as a
+     reference-only cleanup with no schema change.
+   - 9.3 ✅ Decision/solution: runtime code has no direct `auth.User` dependency
+     that needs `get_user_model()`. The only remaining direct
+     `django.contrib.auth.models.User` imports were in `coins/tests.py` and
+     `portfolio/tests.py`; those tests now use `from django.contrib.auth import
+     get_user_model` plus `User = get_user_model()`, matching `accounts/tests.py`.
+     Keep `accounts.views.UserCreationForm` while 9.1 keeps the default
+     `auth.User`; replace it with a custom creation form only if a custom user
+     model is introduced later.
+   - 9.4 ✅ Decision/solution: documented the current deletion policy without a
+     schema change. User-owned data is hard-deleted with the user:
+     `Watchlist.user` and `PortfolioTransaction.user` stay `on_delete=CASCADE`,
+     which is acceptable for the current simple app because there is no
+     account-deletion UI, audit-retention policy, or anonymization requirement.
+     Watchlist rows are disposable preference data and may also be deleted by user
+     toggles. Portfolio transactions are user-owned history, not yet an immutable
+     audit ledger; deleting a user deletes that history. `Coin` rows should not be
+     deleted operationally: catalog removal/delisting uses `is_active=False`. The
+     existing `Coin` cascades are a known admin/shell footgun, but changing
+     `PortfolioTransaction.coin` to `PROTECT`/`SET_NULL` is deferred to 11.6/13.4
+     with inactive-coin history and audit-record policy.
+   - 9.5 ✅ Decision/solution: added an `accounts` URL namespace while keeping
+     global compatibility aliases for `login`, `logout`, and `register`.
+     `accounts:*` is now the canonical internal target (`LOGIN_URL`, templates,
+     tests, and registration redirects), but the global names still resolve to the
+     same `/accounts/...` paths so existing redirects and Django-auth-style
+     assumptions remain compatible during the refactor.
 
    Verification:
 
