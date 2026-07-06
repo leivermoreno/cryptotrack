@@ -235,12 +235,28 @@ sections keep their full task lists.
 
    Goal: stop displaying incorrect values before portfolio metric work expands.
 
-   - 8.1 Rewrite number formatting around `Decimal` and explicit sign handling.
-   - 8.2 Cover negative non-integers, tiny positive and negative values, zero, `None`,
+   - 8.1 ✅ Rewrite number formatting around `Decimal` and explicit sign handling.
+     Decision/solution: `format_number` now coerces with `Decimal(str(value))`,
+     formats absolute magnitude, then prepends an explicit sign; small-number
+     truncation behavior and `$-12.34` currency display were preserved.
+   - 8.2 ✅ Cover negative non-integers, tiny positive and negative values, zero, `None`,
      invalid strings, and large values.
-   - 8.3 Normalize `-0.00%` to `0%` where appropriate.
-   - 8.4 Decide whether zero percentage change should be neutral rather than danger.
-   - 8.5 Remove unused template filters if they have no planned use.
+     Decision/solution: added formatter coverage for numeric edge cases and a shared
+     private Decimal coercion helper. `format_number`, `format_amount`, and
+     `format_percentage` now render `-` for `None`, blank/invalid strings, conversion
+     errors, and non-finite values.
+   - 8.3 ✅ Normalize `-0.00%` to `0%` where appropriate.
+     Decision/solution: `format_percentage` still formats to two decimals first, then
+     collapses both formatted zero strings (`0.00` and `-0.00`) to `0%`; real negative
+     percentages such as `-0.01%` keep their sign.
+   - 8.4 ✅ Decide whether zero percentage change should be neutral rather than danger.
+     Decision/solution: zero percentage changes are neutral and return no Bootstrap
+     class. `percentage_change_class` now shares `_to_decimal` invalid-input handling
+     and classifies using the two-decimal rounded value, so values displayed as `0%`
+     are neutral while real negatives such as `-0.01%` remain `text-danger`.
+   - 8.5 ✅ Remove unused template filters if they have no planned use.
+     Decision/solution: removed the unused registered `multiply` filter; remaining
+     registered filters/tags are used by templates or covered by tests.
 
    Verification:
 

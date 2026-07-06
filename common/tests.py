@@ -1,20 +1,11 @@
 """Direct tests for the shared ``common`` query/presentation helpers.
 
-Subtask 2.3 of ``inspection/refactor_steps.md`` -- Section 2 SAFETY-NET
-BASELINE. Two kinds of tests live here:
-
-* GREEN characterization tests assert the CURRENT correct behavior so a future
-  refactor cannot silently regress it.
-* ``@unittest.expectedFailure`` tests assert the CORRECT (desired) behavior for
-  a KNOWN BUG. They keep the suite green today (expected failures do not fail
-  the run) and will flip to XPASS when the cited refactor step fixes the bug.
-
-Bugs are catalogued in ``inspection/common.md`` ("High-value bugs" / the
-per-file "Risks and bugs" sections). Each ``expectedFailure`` cites both the
-inspection finding and the refactor step that will fix it.
+Subtask 2.3 of ``inspection/refactor_steps.md`` started these as safety-net
+tests. Later refactor sections converted the known formatter bugs into
+regression coverage while preserving characterization coverage for shared query
+and presentation behavior.
 """
 
-import unittest
 from decimal import Decimal
 from html import unescape
 from urllib.parse import parse_qs, urlsplit
@@ -79,38 +70,35 @@ class FormatNumberTests(SimpleTestCase):
         # -0.5 goes through the <1 branch and is formatted correctly today.
         self.assertEqual(format_number(-0.5), "-0.5")
 
-    # --- KNOWN BUGS: negative non-integer formatting -----------------------
-    # inspection/common.md, "High-value bugs" #1 + format_number/
-    # get_decimal_formatted notes: get_decimal_formatted counts the leading
-    # "-" as a significant character, and the ``value >= 1`` two-decimal branch
-    # is skipped for negatives, so negative non-integers are truncated.
-    # Fix: refactor step 8.1 (handle sign separately from significant digits).
-
-    @unittest.expectedFailure
     def test_negative_value_ge_one_magnitude_two_dp(self):
-        # Correct: "-12.34". Currently observed: "-12." (truncated). Step 8.1.
         self.assertEqual(format_number(-12.34), "-12.34")
 
-    @unittest.expectedFailure
     def test_negative_small_value_two_dp(self):
-        # Correct: "-1.23". Currently observed: "-1.2". Step 8.1.
         self.assertEqual(format_number(-1.23), "-1.23")
 
-    @unittest.expectedFailure
     def test_negative_decimal_value_ge_one_magnitude(self):
-        # Correct: "-12.34". Currently observed: "-12.". Step 8.1.
         self.assertEqual(format_number(Decimal("-12.34")), "-12.34")
 
-    # --- KNOWN BUG: invalid/blank string input raises ----------------------
-    # inspection/common.md, "High-value bugs" #1 (format_number assumes
-    # int(value) succeeds). A blank/invalid string raises ValueError via
-    # int(value) instead of rendering a safe fallback.
-    # Fix: refactor step 8.2. The exact fallback string is finalized in 8.2;
-    # "-" (matching the None case) is asserted here as the expected safe value.
-    @unittest.expectedFailure
     def test_empty_string_returns_safe_fallback(self):
-        # Correct: a safe fallback (asserting "-"). Currently raises ValueError.
         self.assertEqual(format_number(""), "-")
+
+    def test_invalid_string_returns_safe_fallback(self):
+        self.assertEqual(format_number("abc"), "-")
+
+    def test_blank_string_returns_safe_fallback(self):
+        self.assertEqual(format_number("   "), "-")
+
+    def test_zero_returns_zero(self):
+        self.assertEqual(format_number(0), "0")
+
+    def test_tiny_negative_decimal_up_to_four_significant_digits(self):
+        self.assertEqual(format_number(Decimal("-0.00012345")), "-0.0001234")
+
+    def test_large_decimal_uses_thousands_separator(self):
+        self.assertEqual(
+            format_number(Decimal("999999999999.99")),
+            "999,999,999,999.99",
+        )
 
 
 class FormatAmountTests(SimpleTestCase):
@@ -122,12 +110,26 @@ class FormatAmountTests(SimpleTestCase):
     def test_positive_value_gets_dollar_prefix(self):
         self.assertEqual(format_amount(1234.5), "$1,234.50")
 
-    # KNOWN BUG: inherits the negative-formatting defect from format_number.
-    # inspection/common.md "High-value bugs" #1. Fix: refactor step 8.1.
-    @unittest.expectedFailure
     def test_negative_value_gets_dollar_prefix(self):
-        # Correct: "$-12.34". Currently observed: "$-12.". Step 8.1.
         self.assertEqual(format_amount(-12.34), "$-12.34")
+
+    def test_empty_string_passes_through_dash(self):
+        self.assertEqual(format_amount(""), "-")
+
+    def test_invalid_string_passes_through_dash(self):
+        self.assertEqual(format_amount("abc"), "-")
+
+    def test_zero_gets_dollar_prefix(self):
+        self.assertEqual(format_amount(0), "$0")
+
+    def test_tiny_negative_decimal_gets_dollar_prefix(self):
+        self.assertEqual(format_amount(Decimal("-0.00012345")), "$-0.0001234")
+
+    def test_large_decimal_gets_dollar_prefix(self):
+        self.assertEqual(
+            format_amount(Decimal("999999999999.99")),
+            "$999,999,999,999.99",
+        )
 
 
 class FormatPercentageTests(SimpleTestCase):
@@ -143,18 +145,29 @@ class FormatPercentageTests(SimpleTestCase):
     def test_positive_value_two_dp(self):
         self.assertEqual(format_percentage(1.5), "1.50%")
 
-    # KNOWN BUG: tiny negatives render "-0.00%" because only exact "0.00" is
-    # normalized to "0". inspection/common.md, format_percentage notes.
-    # Fix: refactor step 8.3.
-    @unittest.expectedFailure
+    def test_empty_string_returns_dash(self):
+        self.assertEqual(format_percentage(""), "-")
+
+    def test_invalid_string_returns_dash(self):
+        self.assertEqual(format_percentage("abc"), "-")
+
+    def test_tiny_positive_decimal_normalized_to_zero(self):
+        self.assertEqual(format_percentage(Decimal("0.001")), "0%")
+
+    def test_large_decimal_keeps_two_dp(self):
+        self.assertEqual(
+            format_percentage(Decimal("999999999999.99")),
+            "999999999999.99%",
+        )
+
     def test_tiny_negative_normalized_to_zero(self):
-        # Correct: "0%". Currently observed: "-0.00%". Step 8.3.
         self.assertEqual(format_percentage(-0.001), "0%")
 
-    @unittest.expectedFailure
     def test_tiny_negative_decimal_normalized_to_zero(self):
-        # Correct: "0%". Currently observed: "-0.00%". Step 8.3.
         self.assertEqual(format_percentage(Decimal("-0.001")), "0%")
+
+    def test_negative_value_that_does_not_round_to_zero_keeps_sign(self):
+        self.assertEqual(format_percentage(Decimal("-0.01")), "-0.01%")
 
 
 class PercentageChangeClassTests(SimpleTestCase):
@@ -169,13 +182,20 @@ class PercentageChangeClassTests(SimpleTestCase):
     def test_none_returns_empty(self):
         self.assertEqual(percentage_change_class(None), "")
 
-    def test_zero_is_currently_danger(self):
-        # UNDECIDED DESIGN DECISION (refactor step 8.4): zero currently maps to
-        # "text-danger" (value <= 0). Most financial UIs treat a 0% change as
-        # neutral. This is characterized GREEN as the CURRENT behavior; step 8.4
-        # will decide whether zero should become neutral. NOT an expectedFailure
-        # because no decision has been made yet.
-        self.assertEqual(percentage_change_class(0), "text-danger")
+    def test_zero_is_neutral(self):
+        self.assertEqual(percentage_change_class(0), "")
+
+    def test_tiny_positive_displayed_as_zero_is_neutral(self):
+        self.assertEqual(percentage_change_class(Decimal("0.001")), "")
+
+    def test_tiny_negative_displayed_as_zero_is_neutral(self):
+        self.assertEqual(percentage_change_class(Decimal("-0.001")), "")
+
+    def test_negative_value_that_does_not_round_to_zero_is_danger(self):
+        self.assertEqual(percentage_change_class(Decimal("-0.01")), "text-danger")
+
+    def test_invalid_string_returns_empty(self):
+        self.assertEqual(percentage_change_class("abc"), "")
 
 
 class AddDirectionSignTests(SimpleTestCase):

@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from django import template
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
@@ -5,14 +7,6 @@ from django.utils.safestring import mark_safe
 from common.utils import build_query_string
 
 register = template.Library()
-
-
-@register.filter
-def multiply(value, arg):
-    try:
-        return float(value) * float(arg)
-    except (ValueError, TypeError):
-        return ""
 
 
 def get_decimal_formatted(value, precision, significant_digits):
@@ -31,18 +25,41 @@ def get_decimal_formatted(value, precision, significant_digits):
     return value_str[: last_significant_idx + 1]
 
 
+def _to_decimal(value):
+    if value is None:
+        return None
+
+    if isinstance(value, str) and not value.strip():
+        return None
+
+    try:
+        decimal_value = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+    if not decimal_value.is_finite():
+        return None
+
+    return decimal_value
+
+
 @register.filter(is_safe=True)
 def format_number(value):
+    value = _to_decimal(value)
     if value is None:
         return "-"
-    elif value == int(value):
-        output = f"{value:,.0f}"
-    elif value >= 1:
-        output = f"{value:,.2f}"
-    else:
-        output = get_decimal_formatted(value, precision=10, significant_digits=4)
 
-    return f"{output}"
+    sign = "-" if value < 0 else ""
+    magnitude = abs(value)
+
+    if magnitude == int(magnitude):
+        output = f"{magnitude:,.0f}"
+    elif magnitude >= 1:
+        output = f"{magnitude:,.2f}"
+    else:
+        output = get_decimal_formatted(magnitude, precision=10, significant_digits=4)
+
+    return f"{sign}{output}"
 
 
 @register.filter(is_safe=True)
@@ -56,23 +73,29 @@ def format_amount(value):
 
 @register.filter(is_safe=True)
 def format_percentage(value):
+    value = _to_decimal(value)
     if value is None:
         return "-"
     else:
         val = f"{value:.2f}"
-        if val == "0.00":
+        if val in {"0.00", "-0.00"}:
             val = "0"
         return val + "%"
 
 
 @register.filter(is_safe=True)
 def percentage_change_class(value):
+    value = _to_decimal(value)
     if value is None:
         return ""
-    if value <= 0:
+
+    rounded_value = Decimal(f"{value:.2f}")
+    if rounded_value == 0:
+        return ""
+    if rounded_value < 0:
         return "text-danger"
-    else:
-        return "text-success"
+
+    return "text-success"
 
 
 @register.simple_tag
