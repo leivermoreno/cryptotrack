@@ -98,18 +98,32 @@ are numbered `N.M` (e.g. `11.1`) and completed items are marked ✅.
 
     Goal: make authentication feel intentional instead of merely wired up.
 
-    - 14.1 Add registration success messages.
-    - 14.2 Preserve an intended destination through registration when appropriate.
-    - 14.3 Decide whether users should be automatically logged in after registering.
-    - 14.4 Add password reset/change routes if this is meant to be usable outside a
-      demo environment.
-    - 14.5 Improve login/register templates while keeping them consistent with the
-      server-rendered Bootstrap app.
+    - 14.1 ✅ Add registration success messages. Decision/solution: keep the
+      current redirect-to-login behavior and enqueue a Django success message after
+      user creation.
+    - 14.2 ✅ Preserve an intended destination through registration when appropriate.
+      Decision/solution: safe `next` values are carried through register links/forms
+      and the redirect back to login; unsafe targets are dropped.
+    - 14.3 ✅ Decide whether users should be automatically logged in after
+      registering. Decision/solution: do not auto-login. Registration already
+      preserves safe `next` destinations and shows a success message before
+      sending the user to login; there is no email verification or profile setup
+      flow that would justify changing the auth state here.
+    - 14.4 ✅ Add password reset/change routes if this is meant to be usable
+      outside a demo environment. Decision/solution: wire Django's built-in
+      password reset/change views under the `accounts` namespace, keep the
+      existing global auth URL aliases, add minimal Bootstrap/crispy templates,
+      and expose forgot-password/change-password links.
+    - 14.5 ✅ Improve login/register templates while keeping them consistent with the
+      server-rendered Bootstrap app. Decision/solution: keep the existing auth flow
+      and polish only the rendered Bootstrap form panels, preserving safe `next`,
+      password reset, and cross-links.
 
     Verification:
 
     - Account tests cover anonymous and authenticated navbar states, success
-      messages, redirects, and template rendering.
+      messages, redirects, template rendering, password change, and password reset
+      email/token flow.
 
 15. **Polish table-heavy UI and empty/error states**
 

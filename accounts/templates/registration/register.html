@@ -1,17 +1,39 @@
 {% extends 'base.html' %}
 {% load crispy_forms_filters %}
 
-{% block content %}
-  <div class="container flex-grow-1 d-flex flex-column justify-content-center align-items-center">
-      <h1 class="mb-3 text-center">{% block title %}Register{% endblock %}</h1>
+{% block title %}Register{% endblock title %}
 
-      <form method="post">
-          {% csrf_token %}
-          {{ form|crispy }}
-        <div class="d-flex justify-content-center">
-            <input class="btn btn-primary" type="submit" value="Register">
+{% block content %}
+  <div class="container flex-grow-1 py-5">
+    <div class="row justify-content-center">
+      <div class="col-12 col-sm-10 col-md-7 col-lg-5">
+        <div class="card border-0 shadow-sm">
+          <div class="card-body p-4 p-md-5">
+            <div class="text-center mb-4">
+              <h1 class="h3 mb-2">Register</h1>
+              <p class="text-muted mb-0">Create your CryptoTrack account.</p>
+            </div>
+
+            <form method="post">
+              {% csrf_token %}
+              {{ form|crispy }}
+              {% if next %}
+                <input type="hidden" name="next" value="{{ next }}">
+              {% endif %}
+              <div class="d-grid mt-3">
+                <input class="btn btn-primary" type="submit" value="Register">
+              </div>
+            </form>
+
+            <div class="border-top mt-4 pt-3 text-center">
+              <p class="mb-0">
+                Already have an account?
+                <a href="{% url 'accounts:login' %}{% if next %}?next={{ next|urlencode:'' }}{% endif %}">Login here</a>.
+              </p>
+            </div>
+          </div>
         </div>
-      </form>
-      <p class="mt-3">Already have an account? <a href="{% url 'accounts:login' %}">Login here</a>.</p>
+      </div>
+    </div>
   </div>
 {% endblock %}

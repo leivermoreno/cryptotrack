@@ -30,6 +30,9 @@
                 <li class="nav-item">
                     <a class="nav-link" href="{% url 'portfolio:overview' %}">Portfolio</a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'accounts:password_change' %}">Change Password</a>
+                </li>
                 <form action="{% url 'accounts:logout' %}" method="post">
                     {% csrf_token %}
                     <button class="btn btn-link nav-link border-0" type="submit">Logout</button>
@@ -51,7 +54,7 @@
 {% if messages %}
     <div class="container messages">
         {% for message in messages %}
-            <div class="alert alert-info">{{ message }}</div>
+            <div class="alert {% if message.tags == 'error' %}alert-danger{% elif message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %}" role="alert">{{ message }}</div>
         {% endfor %}
     </div>
 {% endif %}
