@@ -49,12 +49,12 @@
             <td>{{ coin.total_volume|format_amount }}</td>
             <td>{{ coin.market_cap|format_amount }}</td>
             <td>
-                <form action="{% url 'coins:add_remove_to_watchlist' coin.id %}" method="post">
+                <form action="{% url 'coins:add_remove_to_watchlist' coin.cg_id %}" method="post">
                     {% csrf_token %}
                     {% pagination_query page_number sort direction search_query search_query as next_query %}
                     <input type="hidden" name="next" value="{{ request.path }}?{{ next_query }}">
-                        <button type="submit" class="btn btn-sm btn-link text-decoration-none {% if is_watchlist or coin.id in user_watchlist %}text-secondary{% else %}text-primary{% endif %}">
-                        {% if is_watchlist or coin.id in user_watchlist %}
+                        <button type="submit" class="btn btn-sm btn-link text-decoration-none {% if is_watchlist or coin.cg_id in user_watchlist %}text-secondary{% else %}text-primary{% endif %}">
+                        {% if is_watchlist or coin.cg_id in user_watchlist %}
                             Remove
                         {% else %}
                             Add
@@ -62,7 +62,7 @@
                     </button>
                 </form>
             </td>
-            <td><a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.id %}" class="btn btn-sm btn-link text-decoration-none">Add</a></td>
+            <td><a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.cg_id %}" class="btn btn-sm btn-link text-decoration-none">Add</a></td>
         </tr>
     {% endfor %}
     </tbody>

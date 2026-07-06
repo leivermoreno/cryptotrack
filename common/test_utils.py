@@ -56,10 +56,15 @@ def make_market_coin(
 ):
     """Return one market-data dict with all template/math keys (overrides win).
 
-    ``cg_id`` maps to the CoinGecko ``id`` key (e.g. ``"bitcoin"``).
+    ``cg_id`` populates both the raw CoinGecko ``id`` key (e.g. ``"bitcoin"``)
+    and the normalized ``cg_id`` key that ``CoinGeckoClient.get_markets`` adds
+    at read time — so payloads returned by a *patched* client (view tests)
+    carry ``cg_id`` for the templates, and payloads fed as raw HTTP bodies to
+    the *real* client (service tests) are re-normalized harmlessly.
     """
     coin = {
         "id": cg_id,
+        "cg_id": cg_id,
         "name": name,
         "symbol": symbol,
         "current_price": current_price,

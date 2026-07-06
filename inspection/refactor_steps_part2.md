@@ -101,13 +101,61 @@ are numbered `N.M` (e.g. `11.1`) and completed items are marked ✅.
     Goal: make table sorting match user expectations or label the limitation
     clearly.
 
-    - 12.1 Decide whether sorting should be global or current-page only.
-    - 12.2 Use CoinGecko-supported API ordering where possible for market-wide sorts.
-    - 12.3 For search and watchlist, either fetch and sort the whole relevant id set
+    - 12.1 ✅ Decide whether sorting should be global or current-page only.
+      **Decision (product owner): current-page only, no UI labels.** Each list view
+      (index/search/watchlist) reorders only the coins on the currently displayed
+      page; the sort headers are left as-is (no "sorts this page only" caveat added).
+      Rationale: CoinGecko's `/coins/markets` `order=` can only sort market_cap,
+      volume, and rank server-side (rank asc ≡ market_cap desc); price, 24h/7d
+      change, and ATH cannot be globally ordered without fetching the whole market
+      (~170 pages per sort on the demo tier), which is infeasible. Rather than a
+      hybrid (global for the 3 API-orderable columns, page-local for the rest), the
+      product owner chose to keep behavior uniform and the UI uncluttered — global
+      sorting is not worth the API cost/complexity for this app's scale.
+    - 12.2 ✅ Use CoinGecko-supported API ordering where possible for market-wide sorts.
+      **Decision: declined, follows from 12.1.** The client keeps its single
+      `market_cap_desc`/USD query with post-cache `_sort`, so the index cache key
+      stays page-only (`v1:coin_list_page_{page}`) and no `order=` axis enters the
+      key. No code change.
+    - 12.3 ✅ For search and watchlist, either fetch and sort the whole relevant id set
       before pagination when feasible, or keep current-page sorting explicit.
-    - 12.4 Normalize market payload keys before templates so CoinGecko `id` is exposed
+      **Decision: keep current-page sorting (explicit), follows from 12.1.** Neither
+      search (unbounded `icontains` match set, `ids=` requests uncached) nor
+      watchlist fetches-and-sorts the whole set before pagination; sorting stays
+      page-local. Deterministic *pagination* order for the watchlist (so the "current
+      page" is stable across requests) is handled separately in 12.5.
+    - 12.4 ✅ Normalize market payload keys before templates so CoinGecko `id` is exposed
       as `cg_id`.
-    - 12.5 Add deterministic watchlist ordering with timestamps.
+      **Decision: add `cg_id`, retain `id`.** Normalization lives at a single chokepoint,
+      `CoinGeckoClient._normalize_ids`, applied in `get_markets` to the list returned to
+      callers (covers index/search/watchlist uniformly). A repo grep showed the market
+      payload's `id` is consumed not only by templates but also by `portfolio/services.py`
+      (`market_by_id = {coin["id"]: ...}`) and `coins/test_services.py`, so `id` is kept
+      and `cg_id` added rather than renamed (`coins/sync.py`'s `coin["id"]` reads the
+      supported-coins list, not this payload). Templates `coins_table.html` now use
+      `coin.cg_id` for the watchlist add/remove URL, the `in user_watchlist` membership
+      check (which holds cg_id strings via `Watchlist.get_coin_ids_for_user`), and the
+      portfolio add-transaction URL. The transform runs post-cache on freshly unpickled
+      copies, so the cached payload shape is unchanged and no `CACHE_VERSION` bump is
+      needed; missing/non-dict rows are skipped defensively. `make_market_coin` now emits
+      `cg_id` too so patched-client view tests render. `python manage.py test coins` →
+      54 passed; `portfolio` → 70 passed.
+    - 12.5 ✅ Add deterministic watchlist ordering with timestamps.
+      **Decision: `created` timestamp + explicit `(created, id)` order.** Added
+      `created = DateTimeField(auto_now_add=True)` to `Watchlist` (matching
+      `PortfolioTransaction`'s `created` naming) and made
+      `get_coin_ids_for_user` deterministic with `.order_by("created", "id")` —
+      an explicit per-query order rather than a global `Meta.ordering`, keeping it
+      targeted and consistent with the portfolio app's deliberate no-`Meta.ordering`
+      choice. `id` is the stable tiebreak for rows sharing a timestamp, so the
+      `(created, id)` order is total and the paginated watchlist view no longer
+      reshuffles across page boundaries. Migration `0003_watchlist_created`
+      backfills pre-existing rows via a one-off `django.utils.timezone.now` default
+      (`preserve_default=False`); they order among themselves by the `id` tiebreak,
+      preserving insertion order. Tests cover insertion-order return,
+      `created`-dominates-`id` ordering (via a `.update()` that overrides the
+      auto timestamps so the test can't flake on tied `created` values), and
+      cross-page pagination stability. `python manage.py test coins` → 57 passed.
 
     Verification:
 

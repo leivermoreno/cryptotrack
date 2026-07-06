@@ -15,12 +15,15 @@ class Coin(models.Model):
 class Watchlist(models.Model):
     coin = models.ForeignKey(Coin, on_delete=models.CASCADE)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    created = models.DateTimeField(auto_now_add=True)
 
     @staticmethod
     def get_coin_ids_for_user(user_id):
-        return Watchlist.objects.filter(
-            user_id=user_id, coin__is_active=True
-        ).values_list("coin__cg_id", flat=True)
+        return (
+            Watchlist.objects.filter(user_id=user_id, coin__is_active=True)
+            .order_by("created", "id")
+            .values_list("coin__cg_id", flat=True)
+        )
 
     class Meta:
         constraints = [

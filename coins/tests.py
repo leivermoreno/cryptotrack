@@ -1,3 +1,4 @@
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -5,6 +6,7 @@ from django.core.management import call_command
 from django.db import IntegrityError
 from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from coins.exceptions import (
     CoinGeckoResponseError,
@@ -51,6 +53,38 @@ class WatchlistModelTest(TestCase):
         Watchlist.objects.create(user=self.user, coin=self.coin)
         ids = list(Watchlist.get_coin_ids_for_user(self.user.id))
         self.assertIn(self.coin.cg_id, ids)
+
+    def test_get_coin_ids_for_user_orders_by_insertion(self):
+        # Rows added sequentially must come back in insertion order. Whether the
+        # ``auto_now_add`` timestamps tie or advance, ``(created, id)`` collapses
+        # to insertion order because ``id`` increases monotonically.
+        coins = [
+            Coin.objects.create(cg_id=f"coin-{i}", name=f"Coin {i}", symbol=f"C{i}")
+            for i in range(5)
+        ]
+        for coin in coins:
+            Watchlist.objects.create(user=self.user, coin=coin)
+
+        ids = list(Watchlist.get_coin_ids_for_user(self.user.id))
+        self.assertEqual(ids, [coin.cg_id for coin in coins])
+
+    def test_get_coin_ids_for_user_created_dominates_id(self):
+        # ``created`` is the primary sort key: when timestamps disagree with
+        # insertion (id) order, the result follows ``created``, not ``id``.
+        coins = [
+            Coin.objects.create(cg_id=f"coin-{i}", name=f"Coin {i}", symbol=f"C{i}")
+            for i in range(3)
+        ]
+        rows = [Watchlist.objects.create(user=self.user, coin=coin) for coin in coins]
+        # Overwrite auto_now_add timestamps so newest-inserted sorts first.
+        base = timezone.now()
+        for offset, row in enumerate(reversed(rows)):
+            Watchlist.objects.filter(pk=row.pk).update(
+                created=base + timedelta(seconds=offset)
+            )
+
+        ids = list(Watchlist.get_coin_ids_for_user(self.user.id))
+        self.assertEqual(ids, [coin.cg_id for coin in reversed(coins)])
 
 
 class CoinsViewsTest(TestCase):
@@ -160,6 +194,43 @@ class CoinsViewsTest(TestCase):
         self.assertRedirects(
             response, expected_url=reverse("accounts:login", query={"next": url})
         )
+
+    @patch(
+        "coins.views.get_coin_list_with_market",
+        return_value=market_response("bitcoin"),
+    )
+    def test_render_watchlist_pagination_is_stable_across_boundary(self, mock_market):
+        # WATCHLIST_COINS_PAGE == 10, so 15 rows straddle a page boundary. The
+        # split between page 1 and page 2 must be deterministic and repeatable.
+        from coins.settings import WATCHLIST_COINS_PAGE
+
+        coins = [
+            Coin.objects.create(cg_id=f"coin-{i}", name=f"Coin {i}", symbol=f"C{i}")
+            for i in range(WATCHLIST_COINS_PAGE + 5)
+        ]
+        for coin in coins:
+            Watchlist.objects.create(user=self.user, coin=coin)
+        self.client.login(username="testuser", password="pass")
+
+        url = reverse("coins:watchlist")
+
+        def page_ids(page):
+            response = self.client.get(url, {"page": page})
+            self.assertEqual(response.status_code, 200)
+            return list(response.context["page_obj"].object_list)
+
+        page1_first = page_ids(1)
+        page2_first = page_ids(2)
+        page1_second = page_ids(1)
+        page2_second = page_ids(2)
+
+        # Repeated requests return the same split (no reshuffling).
+        self.assertEqual(page1_first, page1_second)
+        self.assertEqual(page2_first, page2_second)
+        # The split follows insertion order and partitions the full set exactly.
+        expected = [coin.cg_id for coin in coins]
+        self.assertEqual(page1_first, expected[:WATCHLIST_COINS_PAGE])
+        self.assertEqual(page2_first, expected[WATCHLIST_COINS_PAGE:])
 
 
 # ---------------------------------------------------------------------------

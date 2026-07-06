@@ -173,7 +173,7 @@ class CoinGeckoClient:
             if len(ids) == 0:
                 return []
             data = self._fetch_markets(page, ids)
-            return self._sort(data, sort, direction)
+            return self._normalize_ids(self._sort(data, sort, direction))
 
         # ids is None: cacheable market page, keyed by page only. CoinGecko is
         # always queried market_cap_desc with vs_currency=usd (both hardcoded in
@@ -185,7 +185,7 @@ class CoinGeckoClient:
             data = self._fetch_markets(page, ids=None)
             cache.set(key, data, self.page_data_timeout)
 
-        return self._sort(data, sort, direction)
+        return self._normalize_ids(self._sort(data, sort, direction))
 
     def _fetch_markets(self, page, ids):
         data = self._request(
@@ -215,6 +215,27 @@ class CoinGeckoClient:
         # Return a new list rather than sorting in place: `data` may be a value
         # handed back from the cache, and callers must not observe mutation.
         return sorted(data, key=lambda x: x.get(key) or 0, reverse=reverse)
+
+    @staticmethod
+    def _normalize_ids(data):
+        """Expose CoinGecko's string ``id`` as ``cg_id`` on each row.
+
+        Single chokepoint for all three consumers (index/search/watchlist all
+        funnel through ``get_markets``), so templates reference an unambiguous
+        ``cg_id`` matching ``Coin.cg_id`` instead of the PK-looking ``id``. The
+        raw ``id`` is retained (not renamed) because ``portfolio/services.py``
+        still keys the market payload by it.
+
+        Applied post-cache to the list returned to callers, so the cached
+        payload shape stays ``id``-only and no ``CACHE_VERSION`` bump is needed
+        (each cache read returns a fresh unpickled copy, so this never mutates
+        stored data). Rows that are not dicts or lack ``id`` (a partial external
+        response) are left untouched rather than crashing the page.
+        """
+        for row in data:
+            if isinstance(row, dict) and "id" in row:
+                row["cg_id"] = row["id"]
+        return data
 
 
 _default_client = CoinGeckoClient()
