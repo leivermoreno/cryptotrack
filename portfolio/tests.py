@@ -632,7 +632,7 @@ class TransactionWorkflowTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 2.5 — known ledger-validation bugs (expected failures)
+# 2.5 — ledger-validation regression coverage
 # ---------------------------------------------------------------------------
 class TransactionValidationBugsTest(TestCase):
     def setUp(self):
