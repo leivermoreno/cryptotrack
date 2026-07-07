@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import logging
 from pathlib import Path
 
 import dj_database_url
@@ -82,6 +83,12 @@ if not DEBUG:
     # health path (e.g. SECURE_REDIRECT_EXEMPT = [r"^healthz$"]) or pointing the
     # health check at the public HTTPS domain.
     SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=True)
+
+    # Exempt the liveness health check from the HTTPS redirect. SecurityMiddleware
+    # matches these patterns against request.path with the leading slash stripped,
+    # so the "/healthz" route (crypto_track/urls.py) becomes "healthz" here. This
+    # lets an internal plaintext-HTTP probe get a 200 instead of a 301 to HTTPS.
+    SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
 
     # Only transmit session/CSRF cookies over HTTPS. Production is HTTPS-only,
     # so there is no legitimate reason to expose these over plaintext.
@@ -178,6 +185,14 @@ DATABASES = {
     )
 }
 
+# DatabaseCache is deliberate, not a placeholder (see AGENTS.md "Cache backend").
+# The cache only memoizes CoinGecko responses (a coin list + a few market pages);
+# it backs no sessions, locks, or counters, and misses degrade gracefully to a
+# live fetch. A DB cache on Postgres is shared across the web/scheduler processes
+# and sufficient at this scale, avoiding a Redis/memcached service dependency.
+# Switch to Redis/memcached only if the cache starts backing sessions/locks, needs
+# cross-region sharing, or market-key cardinality/write volume grows materially.
+# Requires `manage.py createcachetable` once (documented setup step).
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
@@ -260,6 +275,86 @@ STORAGES = {
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Logging
+# https://docs.djangoproject.com/en/5.2/topics/logging/
+#
+# Log to the console (stdout) so the hosting platform (Railway/PaaS) captures it
+# -- there is no writable persistent disk to log files to. Django applies its
+# own DEFAULT_LOGGING first, then this dict on top; `disable_existing_loggers`
+# stays False so the module-level `logging.getLogger(__name__)` loggers already
+# used across the apps (coins/services, coins/sync, portfolio/views, common)
+# keep emitting through this config.
+#
+# Why this is needed in production: Django's default console handler is gated by
+# `require_debug_true`, so with DEBUG off it is inert and 5xx errors would only
+# reach the (unconfigured) `mail_admins` handler. Routing `django` to our own
+# console handler makes server errors visible in the platform log stream without
+# any email/SaaS dependency.
+#
+# LOG_LEVEL (default INFO) tunes this app's own loggers and the root without a
+# redeploy. Django's framework loggers stay fixed so raising LOG_LEVEL to DEBUG
+# doesn't unmute framework internals.
+LOG_LEVEL = env("LOG_LEVEL", default="INFO").upper()
+# Fail closed with a clear message rather than letting dictConfig raise a raw
+# ValueError later. getLevelName returns an int for known names, a string
+# ("Level FOO") otherwise.
+if not isinstance(logging.getLevelName(LOG_LEVEL), int):
+    raise ImproperlyConfigured(
+        f"Environment variable 'LOG_LEVEL' must be a valid logging level "
+        f"(e.g. DEBUG, INFO, WARNING, ERROR, CRITICAL), got {LOG_LEVEL!r}."
+    )
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{asctime} {levelname} {name} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "verbose",
+        },
+    },
+    # Catch-all for third-party libraries; kept at WARNING to stay quiet.
+    "root": {
+        "handlers": ["console"],
+        "level": "WARNING",
+    },
+    "loggers": {
+        # This app's own loggers. Every call site uses getLogger(__name__), so
+        # they all live under these top-level package names.
+        "coins": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "portfolio": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "accounts": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "common": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        # Django framework logger. `django.request` has no separate config, so it
+        # propagates here: 5xx are logged at ERROR and 4xx at WARNING, both of
+        # which surface at this INFO level.
+        "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}
+
+# Error reporting hook (optional, env-gated, inert when unconfigured).
+#
+# Production installs need zero new required env vars and zero new required
+# dependencies, so there is no hard Sentry (or similar) integration here. To add
+# one later, install the SDK and initialize it in this block guarded by its DSN
+# env var, e.g.:
+#
+#     SENTRY_DSN = env("SENTRY_DSN", default="")
+#     if SENTRY_DSN:
+#         import sentry_sdk
+#         from sentry_sdk.integrations.django import DjangoIntegration
+#         sentry_sdk.init(dsn=SENTRY_DSN, integrations=[DjangoIntegration()])
+#
+# Left unset, nothing is imported or initialized and the console logging above
+# remains the sole error sink.
 
 COINGECKO_ENDPOINT = "https://api.coingecko.com/api/v3/"
 # Read lazily so that settings import (and `manage.py check`, migrations, etc.)

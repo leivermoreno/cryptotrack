@@ -53,6 +53,15 @@ Loaded from a `.env` file in the project root (via python-dotenv) or the process
 - `SECURE_HSTS_INCLUDE_SUBDOMAINS` / `SECURE_HSTS_PRELOAD` — bool, both default `false`; keep off until HSTS has run at a long max-age (preload is effectively irreversible).
 - `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` — hardcoded `True` in production (no env knob).
 
+### Process topology
+Production runs two decoupled processes declared in the `Procfile`: `web`
+(`gunicorn crypto_track.wsgi:application`, the only HTTP server; WhiteNoise serves
+static in-process) and `worker` (`runapscheduler`, an optional blocking scheduler
+for catalog re-sync). One-shot release steps run in order — `migrate`,
+`createcachetable`, `collectstatic`, `sync_supported_coins` — before `web` serves
+traffic. Liveness is `GET /healthz`. See the **Deployment (Production)** section
+of `README.md` for the single source of truth.
+
 ## Architecture
 
 Server-rendered Django 5.2 app (Bootstrap 5 + crispy-forms, no JS framework). Four local apps under a `crypto_track` project. CoinGecko is the single external data source; PostgreSQL is the only supported DB.
@@ -67,6 +76,7 @@ Server-rendered Django 5.2 app (Bootstrap 5 + crispy-forms, no JS framework). Fo
 - Uses a thread-local `requests.Session` with the API key header. Requests carry explicit (connect, read) timeouts and a bounded urllib3 retry policy on idempotent GETs. Every transport/status/decode failure is wrapped as a structured `CoinGeckoError` (see `coins/exceptions.py`); consumers (the coins views, `portfolio/services.py` via the overview view, and the scheduler) catch it and degrade gracefully — an in-place "market data unavailable" banner in the web views (HTTP 200), and a logged skip in the scheduler.
 - Caching is **DB-backed** (`DatabaseCache`, the `cache` table). The supported coin list is cached for 2h; per-page market data for 60s (`CACHE_*_TIMEOUT` in `settings.py`). Cache reads use a single `cache.get(key, _MISS)` sentinel lookup (no `has_key`). Keys carry a `v1:` version prefix (`CACHE_VERSION` in `coins/services.py`) so a payload-shape change can be invalidated across deploys by bumping it. The market-page key is **page-only** (`v1:coin_list_page_{page}`): CoinGecko is always queried `market_cap_desc`/USD and sort/direction are applied *after* the cache read, so they are intentionally not part of the key.
 - `get_coin_list_with_market(page, sort, direction, ids=None)` is the central market-data call. When `ids` is passed (search/watchlist/portfolio), results are **not cached** (to avoid cache explosion) and sorting is done in Python via `_sort` (a static method on `CoinGeckoClient`).
+- **Cache backend choice (decided):** `DatabaseCache` on Postgres is intentional, not a stopgap. The cache holds only these two short-lived CoinGecko memoizations (a handful of keys); it backs **no** sessions (those use the default DB-backed `django_session`), locks, or counters, and every miss degrades gracefully to a live fetch. Being in Postgres it is already shared coherently across the web (gunicorn) and scheduler processes. Adding Redis/memcached would add a required service, dependency, and availability dependency for negligible benefit here. One minor cost: expired entries are culled probabilistically on write (`_cull`) in the primary DB, so the `cache` table adds slight row churn/vacuum load — immaterial at this volume. Switch to Redis/memcached only if the cache starts backing sessions/locks, needs cross-region sharing, or market-key cardinality/write volume grows materially. Setup requires `manage.py createcachetable` once (see Commands).
 
 ### Portfolio math (`portfolio/services.py`)
 - `build_holdings` reconstructs open lots per coin using **FIFO** (a `deque` per coin; sells consume oldest lots first).

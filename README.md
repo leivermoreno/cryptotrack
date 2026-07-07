@@ -146,6 +146,86 @@ than a separate CDN or reverse proxy.
 Because the manifest storage returns unhashed URLs while `DEBUG` is on, you do
 **not** need to run `collectstatic` for local development.
 
+## Deployment (Production)
+
+This section ties together the production process topology. The app is built for
+a Railway/PaaS deployment where TLS terminates at the platform edge and requests
+reach the app over plaintext HTTP. Process entrypoints are declared in the
+[`Procfile`](Procfile); all environment variables are injected by the platform
+(the app loads a local `.env` only when present, a no-op in production).
+
+### Long-running processes
+
+Two independent processes are declared in the `Procfile`. They share the same
+PostgreSQL database but are otherwise decoupled:
+
+- **`web`** (`gunicorn crypto_track.wsgi:application`) — the Django WSGI app.
+  This is the only process that serves HTTP. Static assets are served in-process
+  by WhiteNoise (no CDN or reverse proxy; see [Static Files](#static-files)).
+- **`worker`** (`python manage.py runapscheduler`) — a **separate, blocking**
+  APScheduler process that refreshes the coin catalog every 2 hours 5 minutes and
+  cleans up old scheduler-run records. It is **optional** (the web app runs
+  without it), but without it the `Coin` table is never re-synced after the
+  initial `sync_supported_coins`. Run **at most one** instance to avoid duplicate
+  jobs; it does not serve HTTP.
+
+### One-shot release steps
+
+These are **not** long-running processes — they run once per deploy (or once
+ever, where noted) and must complete before the `web` process serves traffic.
+Run them in this order:
+
+1. `python manage.py migrate` — apply database schema migrations.
+2. `python manage.py createcachetable` — create the DB-backed `cache` table.
+   Idempotent; only strictly needed the first time (see [Cache](#cache)).
+3. `python manage.py collectstatic --noinput` — gather hashed assets into
+   `STATIC_ROOT` for WhiteNoise to serve (see [Static Files](#static-files)).
+4. `python manage.py sync_supported_coins` — populate the `Coin` table from
+   CoinGecko. **Must run at least once** before the app is usable; search,
+   watchlist, and portfolio all resolve local `Coin` rows. Thereafter the
+   `worker` process keeps it fresh.
+
+### Database
+
+PostgreSQL is the only supported engine — no SQLite fallback (see
+[Database Strategy](#database-strategy)). The connection is configured via
+`DATABASE_URI` (parsed by `dj-database-url`), defaulting to a local socket DSN.
+The same database backs both the application tables and the cache.
+
+### Cache
+
+The cache is Django's `DatabaseCache`, stored in the `cache` table of the same
+PostgreSQL database (no Redis/memcached). It only memoizes two short-lived
+CoinGecko payloads; misses degrade gracefully, and Postgres shares the cache
+across the `web` and `worker` processes. Create the table once with
+`createcachetable`.
+
+### Health check
+
+`GET /healthz` is a dependency-free liveness endpoint that returns a plain
+`200 "ok"`. It is exempt from the HTTPS redirect (`SECURE_REDIRECT_EXEMPT`), so a
+platform health check hitting it over internal HTTP will not get a `301` — see
+the health-check note under [Installation](#installation) step 6.
+
+### Logging
+
+Application logs are written to stdout via a self-contained `LOGGING` config, for
+the platform to capture. The level is tunable with the optional `LOG_LEVEL` env
+var (default `INFO`; an unrecognized value fails closed).
+
+### Secrets and environment
+
+All configuration comes from the environment (see [Installation](#installation)
+step 6 for the full list and defaults). In production:
+
+- **Required:** `SECRET_KEY`, `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`.
+- **Required at runtime for market data:** `COINGECKO_KEY`.
+- **Railway/PaaS:** set `TRUST_PROXY_SSL_HEADER=true` — TLS terminates at the
+  edge, so without it `SECURE_SSL_REDIRECT` loops forever on `301`s.
+- **Optional knobs:** `LOG_LEVEL`, `SECURE_SSL_REDIRECT`, and the `SECURE_HSTS_*`
+  settings (all have safe defaults; ramp HSTS up manually only once HTTPS is
+  proven).
+
 ## Running Tests
 
 Tests run against a temporary `test_*` PostgreSQL database that Django creates

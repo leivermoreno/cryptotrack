@@ -161,15 +161,26 @@ are numbered `N.M` (e.g. `11.1`) and completed items are marked ✅.
     Goal: make production assumptions explicit after application behavior is
     reliable.
 
-    - 16.1 Document process topology: web process, scheduler process, database, cache,
-      static files, and secrets.
-    - 16.2 Add a production server dependency or deployment-specific requirements.
-    - 16.3 Decide whether database cache is acceptable or whether Redis/memcached is
-      needed.
-    - 16.4 Add a health check route.
-    - 16.5 Add basic production logging and error reporting hooks.
-    - 16.6 Align `.env` behavior across local management commands and ASGI/WSGI, or
-      document that process managers provide production env vars.
+    - 16.1 ✅ Document process topology: web process, scheduler process, database, cache,
+      static files, and secrets. Added a **Deployment (Production)** section to `README.md`
+      (long-running processes vs ordered one-shot release steps) with an AGENTS.md pointer.
+    - 16.2 ✅ Add a production server dependency or deployment-specific requirements.
+      Pinned `gunicorn==26.0.0` in `requirements.txt` and added a portable `Procfile`
+      declaring `web` (gunicorn) and `worker` (`runapscheduler`); release steps stay documented.
+    - 16.3 ✅ Decide whether database cache is acceptable or whether Redis/memcached is
+      needed. Keep `DatabaseCache`: it only memoizes two short-lived CoinGecko payloads
+      (no sessions/locks/counters), misses degrade gracefully, and Postgres shares it
+      across web/scheduler — Redis/memcached would add a service dependency for no gain.
+    - 16.4 ✅ Add a health check route. Added a dependency-free `GET /healthz`
+      liveness view (plain 200 "ok") in `common`, exempted from the prod HTTPS
+      redirect via `SECURE_REDIRECT_EXEMPT`.
+    - 16.5 ✅ Add basic production logging and error reporting hooks. Added a
+      self-contained `LOGGING` dictConfig to stdout (env-tunable `LOG_LEVEL`, default
+      INFO; fail-closed) and an optional, inert env-gated Sentry-style hook (no new deps).
+    - 16.6 ✅ Align `.env` behavior across local management commands and ASGI/WSGI, or
+      document that process managers provide production env vars. Centralized
+      `load_dotenv()` in `crypto_track/env.py` (imported by settings before any env read),
+      so manage.py, gunicorn/wsgi, and asgi load `.env` identically; a no-op in prod.
 
     Verification:
 

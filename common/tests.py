@@ -6,6 +6,7 @@ regression coverage while preserving characterization coverage for shared query
 and presentation behavior.
 """
 
+import logging
 from decimal import Decimal
 from html import unescape
 from urllib.parse import parse_qs, urlsplit
@@ -14,6 +15,7 @@ from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, override_settings
+from django.urls import reverse
 
 from common.decorators.views import validate_common_params
 from common.templatetags.common_extras import (
@@ -715,3 +717,44 @@ class PaginationPartialTests(SimpleTestCase):
         )
 
         self.assertIn("search=a+b", html)
+
+
+# ---------------------------------------------------------------------------
+# G) healthz liveness endpoint (common/views.py, wired in crypto_track/urls.py)
+# ---------------------------------------------------------------------------
+class HealthzTests(SimpleTestCase):
+    """Validate the dependency-free liveness health check."""
+
+    def test_get_returns_200_ok(self):
+        resp = self.client.get("/healthz")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.content, b"ok")
+        self.assertEqual(resp["Content-Type"], "text/plain")
+
+    def test_named_url_resolves_to_healthz_path(self):
+        self.assertEqual(reverse("healthz"), "/healthz")
+
+    def test_non_get_method_is_rejected(self):
+        resp = self.client.post("/healthz")
+        self.assertEqual(resp.status_code, 405)
+
+
+class LoggingConfigTests(SimpleTestCase):
+    """Smoke-check the production LOGGING dictConfig (subtask 16.5)."""
+
+    def test_logging_dictconfig_is_well_formed(self):
+        # Applying the configured LOGGING dict must not raise; this catches
+        # malformed handlers/formatters/level references.
+        from logging.config import dictConfig
+
+        from django.conf import settings
+
+        dictConfig(settings.LOGGING)
+        self.assertFalse(settings.LOGGING["disable_existing_loggers"])
+
+    def test_app_loggers_emit_at_configured_level(self):
+        # The app packages all log via getLogger(__name__), so a record emitted
+        # on the top-level package logger must be handled at its configured level.
+        with self.assertLogs("coins", level="INFO") as captured:
+            logging.getLogger("coins.services").info("smoke")
+        self.assertIn("smoke", captured.output[0])

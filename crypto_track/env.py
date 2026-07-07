@@ -18,6 +18,14 @@ given.
 import os
 
 from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
+# Load a local .env file (if present) before any variable is read. settings.py
+# imports this module before it reads configuration, so every entrypoint that
+# loads Django settings -- manage.py, gunicorn via wsgi.py, and asgi.py -- picks
+# up .env identically. A no-op in production (Railway/PaaS), where no .env file
+# exists and the platform injects env vars directly.
+load_dotenv()
 
 # Sentinel marking a required variable, i.e. no default was supplied.
 _UNSET = object()

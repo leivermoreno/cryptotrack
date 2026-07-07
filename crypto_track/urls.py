@@ -19,8 +19,10 @@ from django.contrib import admin
 from django.urls import include, path
 
 from accounts.urls import urlpatterns as account_urlpatterns
+from common.views import healthz
 
 urlpatterns = [
+    path("healthz", healthz, name="healthz"),
     path("admin/", admin.site.urls),
     path("", include("coins.urls")),
     path("accounts/", include("accounts.urls")),
