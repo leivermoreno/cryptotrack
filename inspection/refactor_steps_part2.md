@@ -129,17 +129,27 @@ are numbered `N.M` (e.g. `11.1`) and completed items are marked ✅.
 
     Goal: improve the app experience after behavior is stable.
 
-    - 15.1 Wrap market, watchlist, overview, and transaction tables in responsive
-      containers.
-    - 15.2 Replace ambiguous text actions with clear commands such as "Manage",
-      "Add transaction", "Edit", and "Delete".
-    - 15.3 Add delete confirmation for portfolio transactions.
-    - 15.4 Improve empty states for empty catalog, empty search, empty watchlist,
-      empty portfolio, and no transactions for a specific coin.
-    - 15.5 Show graceful messages when market data is unavailable.
-    - 15.6 Preserve page/sort/search context after actions where useful.
-    - 15.7 Keep the styling restrained and workflow-focused; this is a data app, not
-      a marketing site.
+    - 15.1 ✅ Wrap market, watchlist, overview, and transaction tables in responsive
+      containers. Wrapped the shared market/watchlist table, portfolio overview table,
+      and shared transaction table in Bootstrap responsive containers.
+    - 15.2 ✅ Replace ambiguous text actions with clear commands such as "Manage",
+      "Add transaction", "Edit", and "Delete". Updated watchlist, market, portfolio
+      holding, and transaction form actions to use explicit command labels.
+    - 15.3 ✅ Add delete confirmation for portfolio transactions.
+      Added a server-rendered confirmation step while preserving POST-only mutation,
+      CSRF protection, ledger validation, and safe next redirects.
+    - 15.4 ✅ Improve empty states for empty catalog, empty search, empty watchlist,
+      empty portfolio, and no transactions for a specific coin. Added scoped Bootstrap
+      alerts and restrained actions while keeping unavailable-market states separate.
+    - 15.5 ✅ Show graceful messages when market data is unavailable.
+      Added a shared unavailable-market partial across market, search, watchlist,
+      and portfolio overview pages, separate from true empty states.
+    - 15.6 ✅ Preserve page/sort/search context after actions where useful.
+      Threaded safe next targets through market add-transaction links and portfolio
+      transaction create/edit/delete flows without weakening redirect validation.
+    - 15.7 ✅ Keep the styling restrained and workflow-focused; this is a data app,
+      not a marketing site. Kept the UI Bootstrap-native and tightened portfolio
+      summary hierarchy, secondary navigation weight, and transaction form density.
 
     Verification:
 

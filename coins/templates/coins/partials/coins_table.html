@@ -1,69 +1,76 @@
 {% load common_extras %}
 
-<table class="table table-hover text-center">
-    <thead class="position-sticky top-0 bg-light">
-    <tr>
-        <th>
-            {% if is_watchlist %}
-                #
-            {% else %}
-                {% sort_link 'rank' page_number sort direction search_query '#' %}
-            {% endif %}
-        </th>
-        <th class="text-start">{% sort_link 'coin' page_number sort direction search_query 'Coin' %}</th>
-        <th>{% sort_link 'price' page_number sort direction search_query 'Price' %}</th>
-        <th>{% sort_link 'price_change_24h' page_number sort direction search_query '24h' %}</th>
-        <th>{% sort_link 'price_change_7d' page_number sort direction search_query '7d' %}</th>
-        <th>{% sort_link 'ath' page_number sort direction search_query 'ATH' %}</th>
-        <th>{% sort_link 'volume' page_number sort direction search_query '24h Volume' %}</th>
-        <th>{% sort_link 'market_cap' page_number sort direction search_query 'Market Cap' %}</th>
-        <th>Watchlist</th>
-        <th>
-            Portfolio
-        </th>
-    </tr>
-    </thead>
-
-    <tbody>
-    {% for coin in coin_list %}
+<div class="table-responsive">
+    <table class="table table-hover text-center">
+        <thead class="position-sticky top-0 bg-light">
         <tr>
             <th>
                 {% if is_watchlist %}
-                    {{ forloop.counter }}
+                    #
                 {% else %}
-                    {{ coin.market_cap_rank|default:"-" }}
+                    {% sort_link 'rank' page_number sort direction search_query '#' %}
                 {% endif %}
             </th>
-            <td class="text-start">
-                {{ coin.name }} -
-                <span class="fw-bold text-primary">{{ coin.symbol }}</span>
-            </td>
-            <td>{{ coin.current_price|format_amount }}</td>
-            <td class="{{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}">
-                {{ coin.price_change_percentage_24h_in_currency|format_percentage }}
-            </td>
-            <td class="{{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}">
-                {{ coin.price_change_percentage_7d_in_currency|format_percentage }}
-            </td>
-            <td>{{ coin.ath|format_amount }}</td>
-            <td>{{ coin.total_volume|format_amount }}</td>
-            <td>{{ coin.market_cap|format_amount }}</td>
-            <td>
-                <form action="{% url 'coins:add_remove_to_watchlist' coin.cg_id %}" method="post">
-                    {% csrf_token %}
-                    {% pagination_query page_number sort direction search_query search_query as next_query %}
-                    <input type="hidden" name="next" value="{{ request.path }}?{{ next_query }}">
-                        <button type="submit" class="btn btn-sm btn-link text-decoration-none {% if is_watchlist or coin.cg_id in user_watchlist %}text-secondary{% else %}text-primary{% endif %}">
-                        {% if is_watchlist or coin.cg_id in user_watchlist %}
-                            Remove
-                        {% else %}
-                            Add
-                        {% endif %}
-                    </button>
-                </form>
-            </td>
-            <td><a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.cg_id %}" class="btn btn-sm btn-link text-decoration-none">Add</a></td>
+            <th class="text-start">{% sort_link 'coin' page_number sort direction search_query 'Coin' %}</th>
+            <th>{% sort_link 'price' page_number sort direction search_query 'Price' %}</th>
+            <th>{% sort_link 'price_change_24h' page_number sort direction search_query '24h' %}</th>
+            <th>{% sort_link 'price_change_7d' page_number sort direction search_query '7d' %}</th>
+            <th>{% sort_link 'ath' page_number sort direction search_query 'ATH' %}</th>
+            <th>{% sort_link 'volume' page_number sort direction search_query '24h Volume' %}</th>
+            <th>{% sort_link 'market_cap' page_number sort direction search_query 'Market Cap' %}</th>
+            <th>Watchlist</th>
+            <th>
+                Portfolio
+            </th>
         </tr>
-    {% endfor %}
-    </tbody>
-</table>
+        </thead>
+
+        <tbody>
+        {% for coin in coin_list %}
+            <tr>
+                <th>
+                    {% if is_watchlist %}
+                        {{ forloop.counter }}
+                    {% else %}
+                        {{ coin.market_cap_rank|default:"-" }}
+                    {% endif %}
+                </th>
+                <td class="text-start">
+                    {{ coin.name }} -
+                    <span class="fw-bold text-primary">{{ coin.symbol }}</span>
+                </td>
+                <td>{{ coin.current_price|format_amount }}</td>
+                <td class="{{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}">
+                    {{ coin.price_change_percentage_24h_in_currency|format_percentage }}
+                </td>
+                <td class="{{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}">
+                    {{ coin.price_change_percentage_7d_in_currency|format_percentage }}
+                </td>
+                <td>{{ coin.ath|format_amount }}</td>
+                <td>{{ coin.total_volume|format_amount }}</td>
+                <td>{{ coin.market_cap|format_amount }}</td>
+                <td class="text-nowrap">
+                    <form action="{% url 'coins:add_remove_to_watchlist' coin.cg_id %}" method="post">
+                        {% csrf_token %}
+                        {% pagination_query page_number sort direction search_query search_query as next_query %}
+                        <input type="hidden" name="next" value="{{ request.path }}?{{ next_query }}">
+                            <button type="submit" class="btn btn-sm btn-link text-decoration-none {% if is_watchlist or coin.cg_id in user_watchlist %}text-secondary{% else %}text-primary{% endif %}">
+                            {% if is_watchlist or coin.cg_id in user_watchlist %}
+                                Remove from watchlist
+                            {% else %}
+                                Add to watchlist
+                            {% endif %}
+                        </button>
+                    </form>
+                </td>
+                <td class="text-nowrap">
+                    {% pagination_query page_number sort direction search_query search_query as add_next_query %}
+                    {% with add_next=request.path|add:"?"|add:add_next_query %}
+                        <a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.cg_id %}?next={{ add_next|urlencode }}" class="btn btn-sm btn-link text-decoration-none">Add transaction</a>
+                    {% endwith %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>

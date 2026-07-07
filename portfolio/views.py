@@ -4,7 +4,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_POST
+from django.urls import reverse
+from django.views.decorators.http import require_http_methods
 
 from coins.exceptions import CoinGeckoError
 from coins.models import Coin
@@ -123,6 +124,7 @@ def show_all_transactions(request):
             "page_obj": page_obj,
             "sort": sort,
             "direction": direction,
+            "empty_transactions_message": "No transactions yet.",
         },
     )
 
@@ -132,6 +134,9 @@ def show_all_transactions(request):
 def create_portfolio_transaction(
     request, coin_id=None, cg_id=None, transaction_id=None
 ):
+    next_url = get_safe_redirect_url(
+        request, request.POST.get("next") or request.GET.get("next")
+    )
     try:
         # Delisted (is_active=False) coins still resolve here: the per-coin page
         # renders history + balance read-only, and mutation permission is
@@ -187,6 +192,8 @@ def create_portfolio_transaction(
                 )
                 form.add_error("amount", str(exc))
             else:
+                if next_url:
+                    return redirect(next_url)
                 if coin_id:
                     return redirect("portfolio:add_transaction", coin_id=coin_id)
                 else:
@@ -203,18 +210,35 @@ def create_portfolio_transaction(
             "page_obj": page,
             "sort": sort,
             "direction": direction,
+            "empty_transactions_message": f"No transactions for {coin.name} yet.",
+            "next_url": next_url,
         },
     )
 
 
 @login_required()
-@require_POST
+@require_http_methods(["GET", "POST"])
 def delete_portfolio_transaction(request, coin_id, transaction_id):
     try:
         coin = Coin.objects.get(id=coin_id)
         transaction = PortfolioTransaction.objects.get(
             pk=transaction_id, user=request.user, coin=coin
         )
+
+        if request.method == "GET":
+            next_url = get_safe_redirect_url(request, request.GET.get("next"))
+            return render(
+                request,
+                "portfolio/confirm_delete_transaction.html",
+                {
+                    "coin": coin,
+                    "transaction": transaction,
+                    "transaction_total": transaction.amount * transaction.price,
+                    "next_url": next_url,
+                    "cancel_url": next_url
+                    or reverse("portfolio:add_transaction", args=[coin_id]),
+                },
+            )
 
         try:
             delete_transaction(transaction=transaction)

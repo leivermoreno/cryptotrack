@@ -1,54 +1,61 @@
 {% load common_extras %}
 
 {% if page_obj.object_list %}
-    <table class="table table-hover text-center">
-        <thead class="position-sticky top-0 bg-light">
-        <tr>
-            <th>#</th>
-            <th>{% sort_link 'type' page_obj.number sort direction search 'Type' %}</th>
-            {% if show_coin_name %}
-                <th>{% sort_link 'coin__name' page_obj.number sort direction search 'Coin' %}</th>
-            {% endif %}
-            <th>{% sort_link 'amount' page_obj.number sort direction search 'Amount' %}</th>
-            <th>{% sort_link 'price' page_obj.number sort direction search 'Price per coin' %}</th>
-            <th>{% sort_link 'total' page_obj.number sort direction search 'Total value' %}</th>
-            <th>{% sort_link 'trade_date' page_obj.number sort direction search 'Trade date' %}</th>
-            <th>{% sort_link 'created' page_obj.number sort direction search 'Entered' %}</th>
-            <th>Actions</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for tx in page_obj.object_list %}
+    <div class="table-responsive">
+        <table class="table table-hover text-center">
+            <thead class="position-sticky top-0 bg-light">
             <tr>
-                <th>{{ forloop.counter }}</th>
-                <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>
+                <th>#</th>
+                <th>{% sort_link 'type' page_obj.number sort direction search 'Type' %}</th>
                 {% if show_coin_name %}
-                    <td>{{ tx.coin.name }} - <span class="fw-bold text-primary">{{ tx.coin.symbol }}</span>{% if not tx.coin.is_active %} <span class="badge bg-secondary">Delisted</span>{% endif %}</td>
+                    <th>{% sort_link 'coin__name' page_obj.number sort direction search 'Coin' %}</th>
                 {% endif %}
-                <td>{{ tx.amount|format_number|default:'-' }}</td>
-                <td>{{ tx.price|format_amount }}</td>
-                <td>{{ tx.total|format_amount }}</td>
-                <td>{{ tx.trade_date|date:"m-d-y" }}</td>
-                <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
-                <td class="d-flex justify-content-evenly">
-                    <a href="{% url 'portfolio:edit_transaction' tx.coin.id tx.id %}"
-                       class="btn btn-sm btn-link text-decoration-none">Edit</a>
-                    <form action="{% url 'portfolio:delete_transaction' coin_id=tx.coin.id transaction_id=tx.id %}"
-                          method="post">
-                        {% csrf_token %}
-                        {% if transaction %}
-                            <input type="hidden" name="next" value="{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}">
-                        {% else %}
-                            {% pagination_query page_obj.number sort direction as next_query %}
-                            <input type="hidden" name="next" value="{{ request.path }}?{{ next_query }}">
-                        {% endif %}
-                        <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none">Delete</button>
-                    </form>
-                </td>
+                <th>{% sort_link 'amount' page_obj.number sort direction search 'Amount' %}</th>
+                <th>{% sort_link 'price' page_obj.number sort direction search 'Price per coin' %}</th>
+                <th>{% sort_link 'total' page_obj.number sort direction search 'Total value' %}</th>
+                <th>{% sort_link 'trade_date' page_obj.number sort direction search 'Trade date' %}</th>
+                <th>{% sort_link 'created' page_obj.number sort direction search 'Entered' %}</th>
+                <th>Actions</th>
             </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+            {% for tx in page_obj.object_list %}
+                <tr>
+                    <th>{{ forloop.counter }}</th>
+                    <td class="{% if tx.type == 'sell' %}text-danger{% else %}text-primary{% endif %}">{{ tx.get_type_display }}</td>
+                    {% if show_coin_name %}
+                        <td>{{ tx.coin.name }} - <span class="fw-bold text-primary">{{ tx.coin.symbol }}</span>{% if not tx.coin.is_active %} <span class="badge bg-secondary">Delisted</span>{% endif %}</td>
+                    {% endif %}
+                    <td>{{ tx.amount|format_number|default:'-' }}</td>
+                    <td>{{ tx.price|format_amount }}</td>
+                    <td>{{ tx.total|format_amount }}</td>
+                    <td>{{ tx.trade_date|date:"m-d-y" }}</td>
+                    <td>{{ tx.created|date:"m-d-y h:i a" }}</td>
+                    <td class="text-nowrap">
+                        {% pagination_query page_obj.number sort direction as current_query %}
+                        {% with current_next=request.path|add:"?"|add:current_query %}
+                        <a href="{% url 'portfolio:edit_transaction' tx.coin.id tx.id %}?next={{ current_next|urlencode }}"
+                           class="btn btn-sm btn-link text-decoration-none me-2">Edit</a>
+                        <form action="{% url 'portfolio:delete_transaction' coin_id=tx.coin.id transaction_id=tx.id %}"
+                              method="get" class="d-inline">
+                            {% if transaction %}
+                                {% if next_url %}
+                                    <input type="hidden" name="next" value="{{ next_url }}">
+                                {% else %}
+                                    <input type="hidden" name="next" value="{% url 'portfolio:add_transaction' coin_id=tx.coin.id %}">
+                                {% endif %}
+                            {% else %}
+                                <input type="hidden" name="next" value="{{ current_next }}">
+                            {% endif %}
+                            <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none">Delete</button>
+                        </form>
+                        {% endwith %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 {% else %}
-    <div class="alert alert-info">Your portfolio is empty.</div>
+    <div class="alert alert-info">{{ empty_transactions_message|default:"No transactions yet." }}</div>
 {% endif %}

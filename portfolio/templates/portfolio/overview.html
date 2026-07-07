@@ -7,18 +7,18 @@
         <h1 class="my-5">{% block title %}Portfolio Overview{% endblock %}</h1>
 
         {% if not market_unavailable %}
-        <div class="summary d-flex">
+        <div class="summary d-flex flex-column flex-sm-row gap-3 gap-sm-5 mb-3">
             <div class="summary-item">
-                <h3>Invested</h3>
-                <p>{{ total_invested|format_amount }}</p>
+                <h6 class="text-muted mb-1">Invested</h6>
+                <p class="mb-0 fw-semibold">{{ total_invested|format_amount }}</p>
             </div>
-            <div class="summary-item ms-5">
-                <h3>Portfolio value</h3>
-                <p>{{ portfolio_value|format_amount }}</p>
+            <div class="summary-item">
+                <h6 class="text-muted mb-1">Portfolio value</h6>
+                <p class="mb-0 fw-semibold">{{ portfolio_value|format_amount }}</p>
             </div>
-            <div class="summary-item ms-5">
-                <h3>UPL</h3>
-                <p>
+            <div class="summary-item">
+                <h6 class="text-muted mb-1">UPL</h6>
+                <p class="mb-0 fw-semibold">
                     {{ portfolio_upl|format_amount }} <span
                         class="{{ portfolio_upl_percentage|percentage_change_class }} small">{{ portfolio_upl_percentage|format_percentage }}</span>
                 </p>
@@ -30,48 +30,51 @@
                 {{ unpriced_count }} holding{{ unpriced_count|pluralize }} excluded from totals &mdash; no current market price.
             </div>
         {% endif %}
-        <a href="{% url 'portfolio:all_transactions' %}" class="btn btn-primary">See all transactions</a>
+        <a href="{% url 'portfolio:all_transactions' %}" class="btn btn-outline-secondary btn-sm">See all transactions</a>
 
         {% if market_unavailable %}
-            <div class="alert alert-info my-3">Market data is temporarily unavailable. Please try again shortly.</div>
+            {% include "common/partials/market_unavailable.html" %}
         {% elif coin_list %}
-        <table class="table table-hover my-3 text-center">
-            <thead class="position-sticky top-0 bg-light">
-            <tr>
-                <th class="text-start">{% sort_link 'name' 1 sort direction search 'Coin' %}</th>
-                <th>{% sort_link 'price' 1 sort direction search 'Price' %}</th>
-                <th>{% sort_link 'avg_buy_price' 1 sort direction search 'Avg buy price' %}</th>
-                <th>{% sort_link 'amount' 1 sort direction search 'Amount' %}</th>
-                <th>{% sort_link 'cost_basis' 1 sort direction search 'Cost basis' %}</th>
-                <th>{% sort_link 'market_value' 1 sort direction search 'Market value' %}</th>
-                <th>{% sort_link 'upl' 1 sort direction search 'UPL' %}</th>
-                <th>{% sort_link 'allocation_percentage' 1 sort direction search 'Allocation' %}</th>
-                <th>Actions</th>
-            </tr>
-            </thead>
-
-            <tbody>
-            {% for coin in coin_list %}
+        <div class="table-responsive my-3">
+            <table class="table table-hover text-center">
+                <thead class="position-sticky top-0 bg-light">
                 <tr>
-                    <td class="text-start">{{ coin.name }} - <span class="text-primary">{{ coin.symbol }}</span>{% if not coin.is_active %} <span class="badge bg-secondary">Delisted</span>{% endif %}</td>
-                    <td>{{ coin.price|format_amount}}</td>
-                    <td>{{ coin.avg_buy_price|format_amount }}</td>
-                    <td>{{ coin.amount|format_number }}</td>
-                    <td>{{ coin.cost_basis|format_amount }}</td>
-                    <td>{{ coin.market_value|format_amount }}</td>
-                    <td>{{ coin.upl|format_amount }} <span class="small {{ coin.upl_percentage|percentage_change_class }}">{{ coin.upl_percentage|format_percentage }}</span></td>
-                    <td>{{ coin.allocation_percentage|format_percentage }}</td>
-                    <td>
-                        <a href="{% url 'portfolio:add_transaction' coin_id=coin.id %}" class="btn btn-sm btn-link text-decoration-none">Edit</a>
-                    </td>
+                    <th class="text-start">{% sort_link 'name' 1 sort direction search 'Coin' %}</th>
+                    <th>{% sort_link 'price' 1 sort direction search 'Price' %}</th>
+                    <th>{% sort_link 'avg_buy_price' 1 sort direction search 'Avg buy price' %}</th>
+                    <th>{% sort_link 'amount' 1 sort direction search 'Amount' %}</th>
+                    <th>{% sort_link 'cost_basis' 1 sort direction search 'Cost basis' %}</th>
+                    <th>{% sort_link 'market_value' 1 sort direction search 'Market value' %}</th>
+                    <th>{% sort_link 'upl' 1 sort direction search 'UPL' %}</th>
+                    <th>{% sort_link 'allocation_percentage' 1 sort direction search 'Allocation' %}</th>
+                    <th>Actions</th>
                 </tr>
-            {% endfor %}
+                </thead>
 
-            </tbody>
-        </table>
+                <tbody>
+                {% for coin in coin_list %}
+                    <tr>
+                        <td class="text-start">{{ coin.name }} - <span class="text-primary">{{ coin.symbol }}</span>{% if not coin.is_active %} <span class="badge bg-secondary">Delisted</span>{% endif %}</td>
+                        <td>{{ coin.price|format_amount}}</td>
+                        <td>{{ coin.avg_buy_price|format_amount }}</td>
+                        <td>{{ coin.amount|format_number }}</td>
+                        <td>{{ coin.cost_basis|format_amount }}</td>
+                        <td>{{ coin.market_value|format_amount }}</td>
+                        <td>{{ coin.upl|format_amount }} <span class="small {{ coin.upl_percentage|percentage_change_class }}">{{ coin.upl_percentage|format_percentage }}</span></td>
+                        <td>{{ coin.allocation_percentage|format_percentage }}</td>
+                        <td class="text-nowrap">
+                            <a href="{% url 'portfolio:add_transaction' coin_id=coin.id %}" class="btn btn-sm btn-link text-decoration-none">Manage</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+
+                </tbody>
+            </table>
+        </div>
         {% else %}
         	<div class="alert alert-info my-3">
-                No coins in your portfolio yet.
+                No open holdings in your portfolio.
+                <a href="{% url 'coins:index' %}" class="alert-link">Browse coins</a>
             </div>
         {% endif %}
     </div>

@@ -154,6 +154,14 @@ class CoinsViewsTest(TestCase):
         coin_names = [c["name"] for c in response.context["coin_list"]]
         self.assertIn("Bitcoin", coin_names)
 
+    @patch("coins.views.get_page_count", return_value=1)
+    @patch("coins.views.get_coin_list_with_market", return_value=[])
+    def test_render_index_empty_catalog(self, mock_market, mock_page_count):
+        response = self.client.get(reverse("coins:index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No coins are available right now.")
+        self.assertContains(response, "Refresh")
+
     @patch(
         "coins.views.get_coin_list_with_market",
         return_value=market_response("bitcoin"),
@@ -174,6 +182,12 @@ class CoinsViewsTest(TestCase):
             expected_url=reverse("coins:index"),
             fetch_redirect_response=False,
         )
+
+    def test_render_search_no_matches(self):
+        response = self.client.get(reverse("coins:search"), {"search": "doesnotexist"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No active coins match "doesnotexist".')
+        self.assertContains(response, "Clear search")
 
     def test_add_remove_to_watchlist_authenticated(self):
         # add
@@ -238,6 +252,13 @@ class CoinsViewsTest(TestCase):
         self.assertRedirects(
             response, expected_url=reverse("accounts:login", query={"next": url})
         )
+
+    def test_render_watchlist_empty(self):
+        self.client.login(username="testuser", password="pass")
+        response = self.client.get(reverse("coins:watchlist"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your watchlist is empty.")
+        self.assertContains(response, "Browse market")
 
     @patch(
         "coins.views.get_coin_list_with_market",
@@ -479,6 +500,11 @@ class QueryPreservationTest(TestCase):
             'value="/search/?page=1&amp;sort=price&amp;direction=desc&amp;'
             'search=Special+Preserve+%26+price%3D1%3F"',
         )
+        self.assertContains(
+            response,
+            "next=/search/%3Fpage%3D1%26sort%3Dprice%26direction%3Ddesc%26"
+            "search%3DSpecial%2BPreserve%2B%2526%2Bprice%253D1%253F",
+        )
 
     @patch("coins.views.get_page_count", return_value=3)
     @patch(
@@ -552,6 +578,7 @@ class CoinGeckoFallbackTest(TestCase):
         self.assertTrue(response.context["market_unavailable"])
         self.assertEqual(response.context["coin_list"], [])
         self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+        self.assertNotContains(response, "No coins are available right now.")
 
     @patch("coins.views.get_page_count", return_value=1)
     @patch(
@@ -563,6 +590,7 @@ class CoinGeckoFallbackTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["market_unavailable"])
         self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+        self.assertNotContains(response, "No coins are available right now.")
 
     @patch(
         "coins.views.get_coin_list_with_market",
@@ -575,6 +603,7 @@ class CoinGeckoFallbackTest(TestCase):
         self.assertTrue(response.context["market_unavailable"])
         self.assertEqual(response.context["coin_list"], [])
         self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+        self.assertNotContains(response, "No active coins match")
 
     @patch(
         "coins.views.get_coin_list_with_market",
@@ -589,6 +618,7 @@ class CoinGeckoFallbackTest(TestCase):
         self.assertTrue(response.context["market_unavailable"])
         self.assertEqual(response.context["coin_list"], [])
         self.assertContains(response, MARKET_UNAVAILABLE_COPY)
+        self.assertNotContains(response, "Your watchlist is empty.")
 
 
 class SupportedCoinSyncTest(TestCase):

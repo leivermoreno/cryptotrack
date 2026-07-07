@@ -174,7 +174,8 @@ class PortfolioViewsTest(TestCase):
         User.objects.create_user(username="testuser2", password="pass")
         self.client.login(username="testuser2", password="pass")
         response = self.client.get(reverse("portfolio:overview"))
-        self.assertContains(response, "No coins in your portfolio yet.")
+        self.assertContains(response, "No open holdings in your portfolio.")
+        self.assertContains(response, "Browse coins")
         self.assertEqual(len(response.context["coin_list"]), 0)
 
     @patch(
@@ -214,6 +215,7 @@ class PortfolioViewsTest(TestCase):
             response,
             "Market data is temporarily unavailable. Please try again shortly.",
         )
+        self.assertNotContains(response, "No open holdings in your portfolio.")
         # No P/L summary metric keys were populated.
         self.assertNotIn("portfolio_value", response.context)
 
@@ -542,6 +544,50 @@ class TransactionWorkflowTest(TestCase):
         self.assertEqual(tx.amount, Decimal("5"))
         self.assertEqual(tx.price, Decimal("11000"))
 
+    def test_create_transaction_honors_safe_next(self):
+        target = (
+            reverse("portfolio:all_transactions") + "?page=1&sort=price&direction=asc"
+        )
+        url = reverse("portfolio:add_transaction", args=[self.coin.id])
+        response = self.client.post(
+            url,
+            {"type": "buy", "amount": "1", "price": "9000", "next": target},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, target)
+
+    def test_create_transaction_ignores_unsafe_next(self):
+        url = reverse("portfolio:add_transaction", args=[self.coin.id])
+        response = self.client.post(
+            url,
+            {
+                "type": "buy",
+                "amount": "1",
+                "price": "9000",
+                "next": "https://evil.example/",
+            },
+        )
+        self.assertRedirects(
+            response,
+            expected_url=reverse("portfolio:add_transaction", args=[self.coin.id]),
+            fetch_redirect_response=False,
+        )
+
+    def test_edit_transaction_honors_safe_next(self):
+        tx = PortfolioTransaction.objects.create(
+            user=self.user, coin=self.coin, type="buy", amount=2, price=10000
+        )
+        target = (
+            reverse("portfolio:all_transactions") + "?page=1&sort=price&direction=asc"
+        )
+        url = reverse("portfolio:edit_transaction", args=[self.coin.id, tx.id])
+        response = self.client.post(
+            url,
+            {"type": "buy", "amount": "5", "price": "11000", "next": target},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, target)
+
     def test_delete_transaction_removes_row(self):
         tx = PortfolioTransaction.objects.create(
             user=self.user, coin=self.coin, type="buy", amount=2, price=10000
@@ -550,6 +596,18 @@ class TransactionWorkflowTest(TestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, 302)
         self.assertFalse(PortfolioTransaction.objects.filter(pk=tx.pk).exists())
+
+    def test_coin_transaction_page_empty_state_is_coin_specific(self):
+        empty_coin = Coin.objects.create(
+            cg_id="litecoin", name="Litecoin", symbol="LTC"
+        )
+        url = reverse("portfolio:add_transaction", args=[empty_coin.id])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No transactions for Litecoin yet.")
+        self.assertNotContains(response, "Your portfolio is empty.")
 
     def test_oversell_on_existing_balance_is_rejected(self):
         # This path IS handled today: selling more than the current balance is
@@ -942,7 +1000,49 @@ class DeletePathTest(TestCase):
             + "?page=2&amp;sort=price&amp;direction=asc"
         )
         self.assertContains(response, f'value="{expected_next}"')
+        self.assertContains(
+            response,
+            "?next=/portfolio/all/%3Fpage%3D2%26sort%3Dprice%26direction%3Dasc",
+        )
         self.assertNotContains(response, "ignored=1")
+
+    def test_delete_get_renders_confirmation_without_deleting(self):
+        tx = PortfolioTransaction.objects.create(
+            user=self.user, coin=self.coin, type="buy", amount=2, price=10000
+        )
+        target = (
+            reverse("portfolio:all_transactions") + "?page=2&sort=price&direction=asc"
+        )
+        url = reverse("portfolio:delete_transaction", args=[self.coin.id, tx.id])
+
+        response = self.client.get(url, {"next": target})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "portfolio/confirm_delete_transaction.html")
+        self.assertContains(response, "Delete this buy transaction for Bitcoin?")
+        self.assertContains(response, "Delete transaction")
+        self.assertContains(
+            response,
+            f'value="{reverse("portfolio:all_transactions")}'
+            "?page=2&amp;sort=price&amp;direction=asc"
+            '"',
+        )
+        self.assertTrue(PortfolioTransaction.objects.filter(pk=tx.pk).exists())
+
+    def test_delete_get_ignores_unsafe_next(self):
+        tx = PortfolioTransaction.objects.create(
+            user=self.user, coin=self.coin, type="buy", amount=2, price=10000
+        )
+        url = reverse("portfolio:delete_transaction", args=[self.coin.id, tx.id])
+
+        response = self.client.get(url, {"next": "https://evil.example/"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "https://evil.example/")
+        self.assertContains(
+            response,
+            f'href="{reverse("portfolio:add_transaction", args=[self.coin.id])}"',
+        )
 
     def test_valid_local_next_is_honored(self):
         tx = PortfolioTransaction.objects.create(

@@ -7,7 +7,12 @@
         <h1 class="my-5">Cryptocurrency prices by market capitalization</h1>
 
         {% if market_unavailable %}
-            <div class="alert alert-info">Market data is temporarily unavailable. Please try again shortly.</div>
+            {% include "common/partials/market_unavailable.html" %}
+        {% elif not coin_list %}
+            <div class="alert alert-info">
+                No coins are available right now.
+                <a href="{% url 'coins:index' %}" class="alert-link">Refresh</a>
+            </div>
         {% else %}
             {% include "coins/partials/coins_table.html" with page_number=page_obj.number %}
             {% include "common/partials/pagination.html" %}

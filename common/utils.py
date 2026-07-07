@@ -56,8 +56,8 @@ def handle_market_unavailable(logger, exc):
 
     Views catch ``CoinGeckoError`` around their market-data calls and merge the
     returned dict into the template context to render an in-place "market data
-    unavailable" banner with an empty table (HTTP 200 — the page shell stays
-    usable).
+    unavailable" banner without a market-data table (HTTP 200 — the page shell
+    stays usable).
     """
     log_coingecko_failure(logger, exc)
     return {"coin_list": [], "market_unavailable": True}

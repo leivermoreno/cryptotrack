@@ -5,17 +5,20 @@
     <div class="container">
         <h1 class="my-3">{% block title %}{% if transaction %}Edit{% else %}Create{% endif %} Transaction{% endblock %}
             for {{ coin.name }}{% if not coin.is_active %} <span class="badge bg-secondary align-middle">Delisted</span>{% endif %}</h1>
-        <div class="d-flex flex-column align-items-center">
-            <div class="alert alert-info mb-3">
-                <strong>Available balance:</strong> {{ balance|floatformat }}
-            </div>
-            <form method="post" class="mb-5">
-                {% csrf_token %}
-                {{ form|crispy }}
-                <div class="d-flex justify-content-center">
-                    <input class="btn btn-primary" type="submit" value="Submit ">
+        <div class="row">
+            <div class="col-lg-6 col-xl-5">
+                <div class="alert alert-info mb-3">
+                    <strong>Available balance:</strong> {{ balance|floatformat }}
                 </div>
-            </form>
+                <form method="post" class="mb-4">
+                    {% csrf_token %}
+                    {% if next_url %}
+                        <input type="hidden" name="next" value="{{ next_url }}">
+                    {% endif %}
+                    {{ form|crispy }}
+                    <input class="btn btn-primary" type="submit" value="{% if transaction %}Save changes{% else %}Add transaction{% endif %}">
+                </form>
+            </div>
         </div>
 
         {% include 'portfolio/partials/transactions_table.html' %}

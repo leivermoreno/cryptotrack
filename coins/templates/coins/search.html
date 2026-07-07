@@ -3,12 +3,15 @@
 {% block content %}
     <div class="container">
         <h1 class="my-5">{% block title %}Results for {{ search_query }}{% endblock %}</h1>
-        {% if coin_list %}
+        {% if market_unavailable %}
+            {% include "common/partials/market_unavailable.html" %}
+        {% elif coin_list %}
             {% include "coins/partials/coins_table.html" with page_number=page_obj.number %}
-        {% elif market_unavailable %}
-            <div class="alert alert-info">Market data is temporarily unavailable. Please try again shortly.</div>
         {% else %}
-            <div class="alert alert-info">No coins found matching your search criteria.</div>
+            <div class="alert alert-info">
+                No active coins match "{{ search_query }}".
+                <a href="{% url 'coins:index' %}" class="alert-link">Clear search</a>
+            </div>
         {% endif %}
         {% if not market_unavailable %}
             {% include "common/partials/pagination.html" with send_search=True %}
