@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.forms import UserCreationForm
+from django.db import IntegrityError
 from django.shortcuts import redirect, render
 from django.urls import reverse
 
@@ -34,15 +35,22 @@ def register(request):
     if request.method == "POST":
         form = UserCreationForm(request.POST)
         if form.is_valid():
-            form.save()
-            messages.success(
-                request, "Your account has been created. You can now log in."
-            )
-            login_url = reverse("accounts:login")
-            if safe_next:
-                query_string = build_query_string({REDIRECT_FIELD_NAME: safe_next})
-                login_url = f"{login_url}?{query_string}"
-            return redirect(login_url)
+            try:
+                form.save()
+            except IntegrityError:
+                # A concurrent request created the same username between
+                # form validation and the INSERT (TOCTOU race). Surface it
+                # as a form error instead of a 500.
+                form.add_error("username", "A user with that username already exists.")
+            else:
+                messages.success(
+                    request, "Your account has been created. You can now log in."
+                )
+                login_url = reverse("accounts:login")
+                if safe_next:
+                    query_string = build_query_string({REDIRECT_FIELD_NAME: safe_next})
+                    login_url = f"{login_url}?{query_string}"
+                return redirect(login_url)
     else:
         form = UserCreationForm()
     return render(
