@@ -154,6 +154,39 @@ reach the app over plaintext HTTP. Process entrypoints are declared in the
 [`Procfile`](Procfile); all environment variables are injected by the platform
 (the app loads a local `.env` only when present, a no-op in production).
 
+### Container images (Docker)
+
+A single multi-stage [`Dockerfile`](Dockerfile) defines two consumable targets
+that share one `base` stage (so the interpreter, OS packages, and layer order
+never drift between environments):
+
+- **`prod`** — the final stage, and therefore what `docker build .` and Railway
+  (which builds the Dockerfile's last stage) produce. Installs only
+  `requirements.txt` into an isolated venv, bakes hashed static assets in at
+  build time (`collectstatic`), runs as a non-root `app` user, and starts
+  `gunicorn` bound to `$PORT`.
+- **`dev`** — adds the dev tooling (Ruff, pre-commit) and runs Django's
+  autoreloading `runserver`. The source is bind-mounted at runtime by
+  [`docker-compose.yml`](docker-compose.yml), which also starts a Postgres
+  service and the scheduler `worker`, mirroring the prod topology locally:
+
+  ```bash
+  docker compose up          # Postgres + web (autoreload) + worker
+  docker compose run --rm web python manage.py test
+  ```
+
+**Railway builds from this Dockerfile** via [`railway.json`](railway.json)
+(`builder: DOCKERFILE`), replacing the Nixpacks/Procfile build. It runs the
+one-shot release steps as `preDeployCommand` (migrate, createcachetable, coin
+sync — see below) and health-checks `/healthz`. Two points when deploying:
+
+- Create **two services from the same repo/image**: the `web` service uses the
+  default start command from `railway.json`; the `worker` service overrides its
+  start command to `python manage.py runapscheduler` (and needs no healthcheck).
+- Settings read the DSN from **`DATABASE_URI`**, but an attached Railway Postgres
+  exposes `DATABASE_URL`. Set `DATABASE_URI=${{Postgres.DATABASE_URL}}` (a
+  reference variable) on each service.
+
 ### Long-running processes
 
 Two independent processes are declared in the `Procfile`. They share the same
@@ -173,17 +206,22 @@ PostgreSQL database but are otherwise decoupled:
 
 These are **not** long-running processes — they run once per deploy (or once
 ever, where noted) and must complete before the `web` process serves traffic.
-Run them in this order:
+On the Docker/Railway path, `collectstatic` is baked into the image at build
+time and steps 1, 2, and 4 run automatically as the `preDeployCommand` in
+[`railway.json`](railway.json). Run them in this order:
 
 1. `python manage.py migrate` — apply database schema migrations.
 2. `python manage.py createcachetable` — create the DB-backed `cache` table.
    Idempotent; only strictly needed the first time (see [Cache](#cache)).
 3. `python manage.py collectstatic --noinput` — gather hashed assets into
    `STATIC_ROOT` for WhiteNoise to serve (see [Static Files](#static-files)).
+   **Baked into the prod image at build time** on the Docker path, so it is not
+   part of `preDeployCommand`.
 4. `python manage.py sync_supported_coins` — populate the `Coin` table from
    CoinGecko. **Must run at least once** before the app is usable; search,
    watchlist, and portfolio all resolve local `Coin` rows. Thereafter the
-   `worker` process keeps it fresh.
+   `worker` process keeps it fresh. In `railway.json` it is suffixed with
+   `|| true` so a transient CoinGecko outage can't block a deploy.
 
 ### Database
 

@@ -30,6 +30,28 @@ pre-commit run --all-files            # run commit hooks across the repo
 pre-commit run --hook-stage pre-push --all-files   # run push hooks
 ```
 
+### Docker (containerized)
+
+A single multi-stage `Dockerfile` has a `dev` and a `prod` target sharing one
+`base` stage. `prod` is the **last** stage, so `docker build .` and Railway
+(`railway.json`, `builder: DOCKERFILE`) produce it: venv with runtime deps only,
+static baked in via `collectstatic`, non-root `app` user, `gunicorn` on `$PORT`.
+`dev` adds dev tooling and runs `runserver`; `docker-compose.yml` bind-mounts the
+source and starts Postgres + `web` + `worker`.
+
+```bash
+docker compose up                                   # local dev: db + web (autoreload) + worker
+docker compose run --rm web python manage.py test   # run the suite in the container
+docker build --target prod -t cryptotrack:prod .    # build the production image
+```
+
+On Railway, migrate/createcachetable/sync run as `preDeployCommand` (not in the
+image); `collectstatic` is baked in at build. Deploy as two services from the
+same image (`web` default start command, `worker` overriding to
+`runapscheduler`), and set `DATABASE_URI=${{Postgres.DATABASE_URL}}` since
+settings read `DATABASE_URI`, not Railway's default `DATABASE_URL`. See the
+**Container images (Docker)** section of `README.md`.
+
 `sync_supported_coins` must be run at least once before the app is usable: the `Coin` table is empty otherwise and search/watchlist/portfolio all resolve local `Coin` rows. `runapscheduler` runs a **blocking** scheduler (foreground process) that re-syncs the coin list on an interval and cleans old scheduler execution records.
 
 Tests need the DB user to have CONNECT privilege on the `postgres` database (Django creates a `test_*` database).

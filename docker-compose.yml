@@ -1,0 +1,70 @@
+# Local development stack: Postgres + the app (dev target, source bind-mounted
+# for hot reload) + the scheduler worker, mirroring the prod web/worker topology.
+#
+#   docker compose up            # start db + web (+ worker)
+#   docker compose run --rm web python manage.py test
+#
+# COINGECKO_KEY is read from your .env (compose auto-loads it for ${...}
+# substitution); everything else is dev-only throwaway config.
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: crypto_track
+      POSTGRES_PASSWORD: crypto_track
+      POSTGRES_DB: crypto_track
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U crypto_track -d crypto_track"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      target: dev
+    # Bind-mount the source over /app so edits hot-reload; keep the container's
+    # staticfiles/ out of the way of the host (anonymous volume).
+    volumes:
+      - .:/app
+      - /app/staticfiles
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_DEBUG: "true"
+      SECRET_KEY: dev-insecure-do-not-use-in-production
+      DATABASE_URI: postgres://crypto_track:crypto_track@db:5432/crypto_track
+      COINGECKO_KEY: ${COINGECKO_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py createcachetable &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  # Optional: the recurring catalog-sync scheduler. Degrades gracefully (logged
+  # skip) if COINGECKO_KEY is unset.
+  worker:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - .:/app
+    environment:
+      DJANGO_DEBUG: "true"
+      SECRET_KEY: dev-insecure-do-not-use-in-production
+      DATABASE_URI: postgres://crypto_track:crypto_track@db:5432/crypto_track
+      COINGECKO_KEY: ${COINGECKO_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    command: python manage.py runapscheduler
+
+volumes:
+  pgdata:
