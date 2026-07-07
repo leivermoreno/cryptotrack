@@ -18,10 +18,7 @@
             <th>{% sort_link 'ath' page_number sort direction search_query 'ATH' %}</th>
             <th>{% sort_link 'volume' page_number sort direction search_query '24h Volume' %}</th>
             <th>{% sort_link 'market_cap' page_number sort direction search_query 'Market Cap' %}</th>
-            <th>Watchlist</th>
-            <th>
-                Portfolio
-            </th>
+            <th class="text-nowrap">Actions</th>
         </tr>
         </thead>
 
@@ -50,24 +47,32 @@
                 <td>{{ coin.total_volume|format_amount }}</td>
                 <td>{{ coin.market_cap|format_amount }}</td>
                 <td class="text-nowrap">
-                    <form action="{% url 'coins:add_remove_to_watchlist' coin.cg_id %}" method="post">
-                        {% csrf_token %}
-                        {% pagination_query page_number sort direction search_query search_query as next_query %}
-                        <input type="hidden" name="next" value="{{ request.path }}?{{ next_query }}">
-                            <button type="submit" class="btn btn-sm btn-link text-decoration-none {% if is_watchlist or coin.cg_id in user_watchlist %}text-secondary{% else %}text-primary{% endif %}">
-                            {% if is_watchlist or coin.cg_id in user_watchlist %}
-                                Remove from watchlist
-                            {% else %}
-                                Add to watchlist
-                            {% endif %}
-                        </button>
-                    </form>
-                </td>
-                <td class="text-nowrap">
-                    {% pagination_query page_number sort direction search_query search_query as add_next_query %}
-                    {% with add_next=request.path|add:"?"|add:add_next_query %}
-                        <a href="{% url 'portfolio:add_transaction_cg' cg_id=coin.cg_id %}?next={{ add_next|urlencode }}" class="btn btn-sm btn-link text-decoration-none">Add transaction</a>
-                    {% endwith %}
+                    <div class="d-inline-flex align-items-center justify-content-center gap-1">
+                        <form action="{% url 'coins:add_remove_to_watchlist' coin.cg_id %}" method="post" class="m-0">
+                            {% csrf_token %}
+                            {% pagination_query page_number sort direction search_query search_query as next_query %}
+                            <input type="hidden" name="next" value="{{ request.path }}?{{ next_query }}">
+                            <button
+                                    type="submit"
+                                    class="btn btn-sm btn-link action-icon-btn text-primary"
+                                    aria-label="{% if is_watchlist or coin.cg_id in user_watchlist %}Remove from watchlist{% else %}Add to watchlist{% endif %}"
+                                    title="{% if is_watchlist or coin.cg_id in user_watchlist %}Remove from watchlist{% else %}Add to watchlist{% endif %}"
+                            >
+                                <i class="bi {% if is_watchlist or coin.cg_id in user_watchlist %}bi-eye-fill{% else %}bi-eye{% endif %}" aria-hidden="true"></i>
+                            </button>
+                        </form>
+                        {% pagination_query page_number sort direction search_query search_query as add_next_query %}
+                        {% with add_next=request.path|add:"?"|add:add_next_query %}
+                            <a
+                                    href="{% url 'portfolio:add_transaction_cg' cg_id=coin.cg_id %}?next={{ add_next|urlencode }}"
+                                    class="btn btn-sm btn-link action-icon-btn text-primary"
+                                    aria-label="Add transaction"
+                                    title="Add transaction"
+                            >
+                                <i class="bi bi-journal-plus" aria-hidden="true"></i>
+                            </a>
+                        {% endwith %}
+                    </div>
                 </td>
             </tr>
         {% endfor %}
