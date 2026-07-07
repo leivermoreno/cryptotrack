@@ -105,7 +105,7 @@ def build_holdings(user, coin_ids):
     # query only transactions for provided coin_ids
     transactions = (
         PortfolioTransaction.objects.filter(user=user, coin_id__in=coin_ids)
-        .order_by("created", "id")
+        .order_by("trade_date", "id")
         .select_related("coin")
     )
     holdings = defaultdict(deque)

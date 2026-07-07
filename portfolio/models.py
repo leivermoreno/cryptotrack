@@ -25,12 +25,10 @@ class PortfolioTransaction(models.Model):
         validators=[MinValueValidator(Decimal("0.00000001"))],
     )
     created = models.DateTimeField(auto_now_add=True)
-    # User-entered trade date (display-only, date-only). Distinct from the auto
-    # `created` insert timestamp: `created` remains the single authoritative key
-    # for FIFO/ledger ordering (see build_holdings / portfolio.ledger, step 10.8);
-    # trade_date is surfaced/sorted in the transaction lists only. Step 11.7
-    # (Option B). Defaults to today for new rows; existing rows were backfilled
-    # from the date of `created`.
+    # User-entered trade date (date-only). Distinct from the auto `created`
+    # insert timestamp: `trade_date` is the authoritative FIFO/ledger order key,
+    # while `created` remains audit metadata. Defaults to today for new rows;
+    # existing rows were backfilled from the date of `created`.
     trade_date = models.DateField(default=timezone.localdate)
 
     class Meta:
@@ -45,21 +43,15 @@ class PortfolioTransaction(models.Model):
             ),
         ]
         indexes = [
-            # Workhorse composite: equality on (user, coin) then the trailing
-            # `created` FIFO key. Serves the ledger FOR UPDATE lock path
-            # (portfolio.ledger._locked_rows), build_holdings (user + coin_id__in),
-            # and get_coin_balance / per-coin transaction lists via the (user, coin)
-            # prefix. Trailing col is `created` — the FIFO-authoritative order key
-            # (see the trade_date note above), NOT trade_date.
+            # Workhorse composite: equality on (user, coin) then the FIFO keys.
+            # Serves the ledger FOR UPDATE lock path (portfolio.ledger._locked_rows),
+            # build_holdings (user + coin_id__in), and per-coin transaction lists
+            # via the (user, coin) prefix.
             models.Index(
-                fields=["user", "coin", "created"],
-                name="pf_txn_user_coin_created",
+                fields=["user", "coin", "trade_date", "id"],
+                name="pf_txn_user_coin_trade_date_id",
             ),
-            # Default ordering of the transaction lists. Step 11.7 changed
-            # DEFAULT_SORT to `trade_date`, so this indexes (user, trade_date)
-            # rather than the task's literal (user, created) suggestion — the
-            # divergence is intentional and traceable to the 11.7 default-sort
-            # change.
+            # Default ordering of the transaction lists.
             models.Index(
                 fields=["user", "trade_date"],
                 name="pf_txn_user_trade_date",

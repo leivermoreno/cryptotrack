@@ -3,10 +3,11 @@
 Owns the ledger invariants for create/edit/delete of ``PortfolioTransaction``
 rows. Every mutation is validated by a single *feasibility replay*: project the
 proposed change onto the user's existing rows for that coin, replay the running
-balance in deterministic ``(created, id)`` order, and reject (``LedgerError``)
-the instant the balance goes negative -- an oversell at any point, not just the
-final balance. This one mechanism covers create-sell over balance, edit-aware
-sell edits, and buy edits/deletes that later sells depend on.
+balance in deterministic ``(trade_date, id)`` order, and reject
+(``LedgerError``) the instant the balance goes negative -- an oversell at any
+point, not just the final balance. This one mechanism covers create-sell over
+balance, edit-aware sell edits, and buy edits/deletes that later sells depend
+on.
 
 Views stay thin: call the service, translate ``LedgerError`` into a form error
 (create/edit) or a user message (delete).
@@ -15,6 +16,7 @@ Views stay thin: call the service, translate ``LedgerError`` into a form error
 from decimal import Decimal
 
 from django.db import transaction as db_transaction
+from django.utils import timezone
 
 from portfolio.exceptions import LedgerError
 from portfolio.models import PortfolioTransaction
@@ -28,14 +30,17 @@ OVERSELL_MESSAGE = "Insufficient balance to sell this amount."
 # amount. Selling, reducing/price-only buy edits, and deletes stay allowed so
 # the user can close or adjust a dead position (step 11.6, Option C).
 DELISTED_BUY_MESSAGE = "Cannot buy or increase a position in a delisted coin."
+# Unsaved creates should sort after existing same-date rows, matching the
+# auto-increment id they will receive after validation.
+NEW_ROW_TIEBREAKER_ID = 2**63 - 1
 
 
 def _ordered_rows(user, coin):
-    """Existing (id, type, amount) rows for user/coin in replay order."""
+    """Existing rows for user/coin in replay order."""
     return list(
         PortfolioTransaction.objects.filter(user=user, coin=coin)
-        .order_by("created", "id")
-        .values_list("id", "type", "amount")
+        .order_by("trade_date", "id")
+        .values_list("id", "type", "amount", "trade_date")
     )
 
 
@@ -50,18 +55,30 @@ def _locked_rows(user, coin):
     return list(
         PortfolioTransaction.objects.filter(user=user, coin=coin)
         .select_for_update(of=("self",))
-        .order_by("created", "id")
-        .values_list("id", "type", "amount")
+        .order_by("trade_date", "id")
+        .values_list("id", "type", "amount", "trade_date")
     )
+
+
+def _timeline_entry(row_id, tx_type, amount, trade_date):
+    return {
+        "id": row_id,
+        "type": tx_type,
+        "amount": amount,
+        "trade_date": trade_date,
+    }
 
 
 def _replay_feasible(entries):
     """True if the running balance never goes negative over ``entries``.
 
-    ``entries`` is an ordered iterable of ``(type, amount)`` pairs.
+    ``entries`` is an iterable of timeline entries. They are sorted here so
+    updates that change ``trade_date`` are validated in their new slot.
     """
     balance = Decimal("0")
-    for tx_type, amount in entries:
+    for entry in sorted(entries, key=lambda row: (row["trade_date"], row["id"])):
+        tx_type = entry["type"]
+        amount = entry["amount"]
         if tx_type == "buy":
             balance += amount
         else:
@@ -74,10 +91,8 @@ def _replay_feasible(entries):
 def create_transaction(*, user, coin, type, amount, price, trade_date=None):
     """Validate and persist a new transaction; raise ``LedgerError`` if infeasible.
 
-    ``trade_date`` is the user-entered, display-only trade date (step 11.7). It
-    is persisted as-is and has NO effect on feasibility or ordering — the replay
-    below still runs in ``(created, id)`` order. ``None`` lets the model default
-    (today) apply.
+    ``trade_date`` is the user-entered trade date and is the authoritative FIFO
+    replay key. ``None`` uses today's date, matching the model default.
     """
     # A delisted coin can be sold/closed but not bought (11.6, Option C).
     if type == "buy" and not coin.is_active:
@@ -89,31 +104,35 @@ def create_transaction(*, user, coin, type, amount, price, trade_date=None):
         # rows, but that's invariant-safe: concurrent first-buys only add
         # balance, and concurrent first-sells both reject at balance 0 -- so no
         # parent lock-anchor is needed.
-        projected = [(t, a) for _id, t, a in _locked_rows(user, coin)]
-        projected.append((type, amount))
+        effective_trade_date = trade_date or timezone.localdate()
+        projected = [
+            _timeline_entry(row_id, row_type, row_amount, row_trade_date)
+            for row_id, row_type, row_amount, row_trade_date in _locked_rows(user, coin)
+        ]
+        projected.append(
+            _timeline_entry(NEW_ROW_TIEBREAKER_ID, type, amount, effective_trade_date)
+        )
         if not _replay_feasible(projected):
             raise LedgerError(OVERSELL_MESSAGE)
-        create_kwargs = {
-            "user": user,
-            "coin": coin,
-            "type": type,
-            "amount": amount,
-            "price": price,
-        }
-        if trade_date is not None:
-            create_kwargs["trade_date"] = trade_date
-        return PortfolioTransaction.objects.create(**create_kwargs)
+        return PortfolioTransaction.objects.create(
+            user=user,
+            coin=coin,
+            type=type,
+            amount=amount,
+            price=price,
+            trade_date=effective_trade_date,
+        )
 
 
 def update_transaction(*, transaction, type, amount, price, trade_date=None):
     """Validate and persist an edit; raise ``LedgerError`` if infeasible.
 
-    Edit-aware: the edited row is replaced *in its own slot*, so its old values
-    do not leak into the replay (10.4), and reducing a buy below what later
-    sells consumed is rejected (10.5).
+    Edit-aware: the edited row is replaced in the projected timeline, so its old
+    values do not leak into the replay (10.4), and reducing a buy below what
+    later sells consumed is rejected (10.5).
 
-    ``trade_date`` (step 11.7) is display-only and does not participate in the
-    replay; ``None`` leaves the row's existing trade_date unchanged.
+    ``trade_date`` participates in the replay; ``None`` leaves the row's
+    existing trade_date unchanged.
     """
     with db_transaction.atomic():
         # Lock the user/coin ledger rows before replaying the edit so it is
@@ -121,7 +140,7 @@ def update_transaction(*, transaction, type, amount, price, trade_date=None):
         # empty-ledger safety note).
         projected = []
         old_type = old_amount = None
-        for row_id, row_type, row_amount in _locked_rows(
+        for row_id, row_type, row_amount, row_trade_date in _locked_rows(
             transaction.user, transaction.coin
         ):
             if row_id == transaction.id:
@@ -129,9 +148,18 @@ def update_transaction(*, transaction, type, amount, price, trade_date=None):
                 # in-memory ``transaction`` instance to the new type/amount, so
                 # the delisted guard below reads the old values from here.
                 old_type, old_amount = row_type, row_amount
-                projected.append((type, amount))
+                projected.append(
+                    _timeline_entry(
+                        row_id,
+                        type,
+                        amount,
+                        trade_date if trade_date is not None else row_trade_date,
+                    )
+                )
             else:
-                projected.append((row_type, row_amount))
+                projected.append(
+                    _timeline_entry(row_id, row_type, row_amount, row_trade_date)
+                )
         # On a delisted coin the user may correct or reduce an existing buy and
         # may sell, but may not acquire more: reject turning a non-buy into a
         # buy, and reject increasing a buy's amount (11.6, Option C).
@@ -164,8 +192,10 @@ def delete_transaction(*, transaction):
         # serialized against concurrent sells (see create_transaction for the
         # empty-ledger safety note).
         projected = [
-            (t, a)
-            for row_id, t, a in _locked_rows(transaction.user, transaction.coin)
+            _timeline_entry(row_id, row_type, row_amount, row_trade_date)
+            for row_id, row_type, row_amount, row_trade_date in _locked_rows(
+                transaction.user, transaction.coin
+            )
             if row_id != transaction.id
         ]
         if not _replay_feasible(projected):

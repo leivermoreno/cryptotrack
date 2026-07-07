@@ -14,7 +14,9 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from coins.exceptions import CoinGeckoUnavailableError
 from coins.models import Coin
 from common.test_utils import make_market_coin, market_response
+from portfolio.exceptions import LedgerError
 from portfolio.forms import PortfolioTransactionForm
+from portfolio.ledger import create_transaction, update_transaction
 from portfolio.services import build_holdings, get_portfolio_overview_data
 
 from .models import PortfolioTransaction
@@ -22,11 +24,18 @@ from .models import PortfolioTransaction
 User = get_user_model()
 
 
-def _make_tx(user, coin, type, amount, price, created=None):
+def _make_tx(user, coin, type, amount, price, created=None, trade_date=None):
     """Create a transaction, optionally forcing the auto_now_add ``created``."""
-    tx = PortfolioTransaction.objects.create(
-        user=user, coin=coin, type=type, amount=amount, price=price
-    )
+    create_kwargs = {
+        "user": user,
+        "coin": coin,
+        "type": type,
+        "amount": amount,
+        "price": price,
+    }
+    if trade_date is not None:
+        create_kwargs["trade_date"] = trade_date
+    tx = PortfolioTransaction.objects.create(**create_kwargs)
     if created is not None:
         PortfolioTransaction.objects.filter(pk=tx.pk).update(created=created)
         tx.refresh_from_db()
@@ -76,17 +85,21 @@ class PortfolioTransactionModelTest(TestCase):
         self.assertNotIn(self.coin.id, coin_ids)
 
     def test_meta_indexes_are_the_two_expected_composites(self):
-        # Pin the index set (step 11.8). The (user, coin, created) composite
-        # serves the ledger lock path / build_holdings / balance; (user,
-        # trade_date) serves the default list sort (11.7). Guards against
-        # accidental additions/removals.
+        # Pin the index set. The (user, coin, trade_date, id) composite serves
+        # the ledger lock path / build_holdings / balance; (user, trade_date)
+        # serves the default list sort. Guards against accidental additions/removals.
         indexes = {
             index.name: index.fields for index in PortfolioTransaction._meta.indexes
         }
         self.assertEqual(
             indexes,
             {
-                "pf_txn_user_coin_created": ["user", "coin", "created"],
+                "pf_txn_user_coin_trade_date_id": [
+                    "user",
+                    "coin",
+                    "trade_date",
+                    "id",
+                ],
                 "pf_txn_user_trade_date": ["user", "trade_date"],
             },
         )
@@ -343,8 +356,8 @@ class BuildHoldingsTest(TestCase):
         self.assertEqual(holdings[self.coin2.cg_id][0]["amount"], Decimal("5"))
 
     def test_same_timestamp_fifo_uses_id_tiebreak(self):
-        # Two buys share the exact same ``created`` timestamp; FIFO must consume
-        # the earlier-inserted (lower-id) lot first. Without the ``id`` tiebreak
+        # Two buys share the exact same trade date; FIFO must consume the
+        # earlier-inserted (lower-id) lot first. Without the ``id`` tiebreak
         # in build_holdings' ordering this would be nondeterministic.
         _make_tx(self.user, self.coin, "buy", 1, 10000, created=self.base)
         _make_tx(self.user, self.coin, "buy", 1, 20000, created=self.base)
@@ -360,6 +373,38 @@ class BuildHoldingsTest(TestCase):
         # first buy (price 10000, lower id) consumed; second buy (20000) remains
         self.assertEqual(len(lots), 1)
         self.assertEqual(lots[0]["price"], Decimal("20000"))
+
+    def test_fifo_uses_trade_date_before_insertion_order(self):
+        base_date = timezone.localdate() - timedelta(days=10)
+        _make_tx(
+            self.user,
+            self.coin,
+            "buy",
+            1,
+            10000,
+            trade_date=base_date + timedelta(days=1),
+        )
+        _make_tx(
+            self.user,
+            self.coin,
+            "buy",
+            1,
+            20000,
+            trade_date=base_date,
+        )
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            1,
+            25000,
+            trade_date=base_date + timedelta(days=2),
+        )
+
+        lots = list(self._holdings()[self.coin.cg_id])
+
+        self.assertEqual(len(lots), 1)
+        self.assertEqual(lots[0]["price"], Decimal("10000"))
 
     def test_oversold_history_does_not_crash(self):
         # Step 11.1: an oversold history (sell exceeding available buy lots) can
@@ -727,10 +772,10 @@ class TransactionValidationBugsTest(TestCase):
 class SellEditAwareTest(TestCase):
     """Locks in edit-aware sell validation delivered by the 10.3 replay.
 
-    Editing a sell replaces that row in its own ``(created, id)`` slot before
-    the feasibility replay, so the old sell amount never double-counts. These
-    tests drive the real form -> ledger service -> view path via the edit view
-    and assert persisted state with ``refresh_from_db()``.
+    Editing a sell replaces that row in the projected timeline before the
+    feasibility replay, so the old sell amount never double-counts. These tests
+    drive the real form -> ledger service -> view path via the edit view and
+    assert persisted state with ``refresh_from_db()``.
     """
 
     def setUp(self):
@@ -788,7 +833,7 @@ class SellEditAwareTest(TestCase):
         self.assertEqual(self._balance(), Decimal("3"))
 
     def test_edit_first_sell_up_replays_before_later_sell(self):
-        # (created, id) ordering matters: buy 10 @t0, sell 3 @t1, sell 3 @t2.
+        # Timeline ordering matters: buy 10 @t0, sell 3 @t1, sell 3 @t2.
         # Editing the FIRST sell up to 8 replays 10 - 8 = 2, then - 3 = -1, which
         # goes negative mid-history even though the naive final balance
         # (10 - 8 - 3 = -1) would too; the point is the replay rejects and the
@@ -830,7 +875,7 @@ class BuyEditDeleteVsLaterSellsTest(TestCase):
 
     A buy cannot be reduced (edit) or removed (delete) below what later sells
     already consumed, because the replay projects the change onto the full
-    ``(created, id)``-ordered history and rejects the instant the running
+    ``(trade_date, id)``-ordered history and rejects the instant the running
     balance goes negative -- at ANY point, not merely at the final balance.
     These tests drive the real views (edit = POST ``portfolio:edit_transaction``;
     delete = POST ``portfolio:delete_transaction``) and assert persisted state.
@@ -1276,7 +1321,7 @@ class DelistedCoinTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 11.7 — user-entered trade_date (display-only, date-only; ledger untouched)
+# 11.7 — user-entered trade_date (date-only; ledger order key)
 # ---------------------------------------------------------------------------
 class TradeDateTest(TestCase):
     def setUp(self):
@@ -1367,7 +1412,7 @@ class TradeDateTest(TestCase):
     def test_migration_backfill_uses_created_date(self):
         # Exercise the 0004 data migration's backfill directly: a row whose
         # trade_date is NULL is filled from the local date of `created`, not
-        # today -- so historical (created, id) order is preserved.
+        # today -- so historical trade dates reflect each row's created date.
         import importlib
 
         mig = importlib.import_module(
@@ -1389,3 +1434,64 @@ class TradeDateTest(TestCase):
         tx.refresh_from_db()
         self.assertEqual(tx.trade_date, timezone.localtime(created_at).date())
         self.assertNotEqual(tx.trade_date, timezone.localdate())
+
+
+class TradeDateLedgerOrderingTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="tdledger", password="pass")
+        self.coin = Coin.objects.create(cg_id="bitcoin", name="Bitcoin", symbol="BTC")
+        self.base_date = timezone.localdate() - timedelta(days=10)
+
+    def test_create_sell_before_buy_trade_date_is_rejected(self):
+        _make_tx(
+            self.user,
+            self.coin,
+            "buy",
+            1,
+            10000,
+            trade_date=self.base_date + timedelta(days=1),
+        )
+
+        with self.assertRaisesMessage(LedgerError, "Insufficient balance"):
+            create_transaction(
+                user=self.user,
+                coin=self.coin,
+                type="sell",
+                amount=Decimal("1"),
+                price=Decimal("12000"),
+                trade_date=self.base_date,
+            )
+
+        self.assertFalse(
+            PortfolioTransaction.objects.filter(user=self.user, type="sell").exists()
+        )
+
+    def test_edit_buy_after_existing_sell_is_rejected(self):
+        buy = _make_tx(
+            self.user,
+            self.coin,
+            "buy",
+            1,
+            10000,
+            trade_date=self.base_date,
+        )
+        _make_tx(
+            self.user,
+            self.coin,
+            "sell",
+            1,
+            12000,
+            trade_date=self.base_date + timedelta(days=1),
+        )
+
+        with self.assertRaisesMessage(LedgerError, "Insufficient balance"):
+            update_transaction(
+                transaction=buy,
+                type="buy",
+                amount=Decimal("1"),
+                price=Decimal("10000"),
+                trade_date=self.base_date + timedelta(days=2),
+            )
+
+        buy.refresh_from_db()
+        self.assertEqual(buy.trade_date, self.base_date)

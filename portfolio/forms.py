@@ -43,7 +43,7 @@ class PortfolioTransactionForm(ModelForm):
 
     def clean_trade_date(self):
         trade_date = self.cleaned_data.get("trade_date")
-        # Blank/omitted -> default to today (field is display-only, not required).
+        # Blank/omitted -> default to today.
         if trade_date is None:
             return timezone.localdate()
         if trade_date > timezone.localdate():
