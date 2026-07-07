@@ -1,20 +1,28 @@
 {% extends "base.html" %}
 
-{% block title %}Home{% endblock title %}
+{% block title %}Market{% endblock title %}
 
 {% block content %}
     <div class="container">
-        <h1 class="my-5">Cryptocurrency prices by market capitalization</h1>
+        <header class="page-header">
+            <h1 class="page-title">Market</h1>
+            <p class="page-subtitle">Live cryptocurrency prices ranked by market capitalization.</p>
+        </header>
 
         {% if market_unavailable %}
             {% include "common/partials/market_unavailable.html" %}
         {% elif not coin_list %}
-            <div class="alert alert-info">
-                No coins are available right now.
-                <a href="{% url 'coins:index' %}" class="alert-link">Refresh</a>
+            <div class="empty-state">
+                <div class="empty-icon"><i class="bi bi-coin"></i></div>
+                <p class="mb-2">No coins are available right now.</p>
+                <a href="{% url 'coins:index' %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                </a>
             </div>
         {% else %}
-            {% include "coins/partials/coins_table.html" with page_number=page_obj.number %}
+            <div class="data-card">
+                {% include "coins/partials/coins_table.html" with page_number=page_obj.number %}
+            </div>
             {% include "common/partials/pagination.html" %}
         {% endif %}
     </div>

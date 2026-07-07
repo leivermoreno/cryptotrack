@@ -3,26 +3,70 @@
 
 {% block content %}
     <div class="container">
-        <h1 class="my-3">{% block title %}{% if transaction %}Edit{% else %}Create{% endif %} Transaction{% endblock %}
-            for {{ coin.name }}{% if not coin.is_active %} <span class="badge bg-secondary align-middle">Delisted</span>{% endif %}</h1>
-        <div class="row">
-            <div class="col-lg-6 col-xl-5">
-                <div class="alert alert-info mb-3">
-                    <strong>Available balance:</strong> {{ balance|floatformat }}
+        <header class="page-header">
+            <h1 class="page-title">
+                {% block title %}{% if transaction %}Edit{% else %}Add{% endif %} transaction{% endblock %}
+                <span class="text-muted fw-normal">· {{ coin.name }}</span>
+                {% if not coin.is_active %}<span class="badge text-bg-secondary align-middle">Delisted</span>{% endif %}
+            </h1>
+        </header>
+
+        <div class="row g-4 justify-content-center">
+            <div class="col-md-8 col-lg-6 col-xl-5">
+                <div class="card">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center justify-content-between mb-3">
+                            <span class="stat-label mb-0"><i class="bi bi-wallet2"></i>Available balance</span>
+                            <span class="fw-semibold tabular">{{ balance|floatformat }}</span>
+                        </div>
+                        <form method="post">
+                            {% csrf_token %}
+                            {% if next_url %}
+                                <input type="hidden" name="next" value="{{ next_url }}">
+                            {% endif %}
+
+                            {% if form.non_field_errors %}
+                                <div class="alert alert-danger py-2">{{ form.non_field_errors }}</div>
+                            {% endif %}
+
+                            <div class="mb-3">
+                                <span class="form-label d-block">Type</span>
+                                <div class="btn-group tx-type-toggle w-100" role="group" aria-label="Transaction type">
+                                    {% for value, label in form.type.field.choices %}
+                                        {% if value %}
+                                            <input type="radio" class="btn-check" name="{{ form.type.html_name }}"
+                                                   id="tx-type-{{ value }}" value="{{ value }}"
+                                                   {% if form.type.value == value %}checked{% elif not form.type.value and value == 'buy' %}checked{% endif %}>
+                                            <label class="btn {% if value == 'sell' %}btn-outline-danger{% else %}btn-outline-success{% endif %}"
+                                                   for="tx-type-{{ value }}">
+                                                <i class="bi {% if value == 'sell' %}bi-arrow-up-right{% else %}bi-arrow-down-left{% endif %} me-1"></i>{{ label }}
+                                            </label>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                {% if form.type.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.type.errors|striptags }}</div>
+                                {% endif %}
+                            </div>
+
+                            {{ form.amount|as_crispy_field }}
+                            {{ form.price|as_crispy_field }}
+                            {{ form.trade_date|as_crispy_field }}
+
+                            <div class="d-grid mt-3">
+                                <button class="btn btn-primary" type="submit">
+                                    <i class="bi {% if transaction %}bi-check-lg{% else %}bi-plus-lg{% endif %} me-1"></i>
+                                    {% if transaction %}Save changes{% else %}Add transaction{% endif %}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
-                <form method="post" class="mb-4">
-                    {% csrf_token %}
-                    {% if next_url %}
-                        <input type="hidden" name="next" value="{{ next_url }}">
-                    {% endif %}
-                    {{ form|crispy }}
-                    <input class="btn btn-primary" type="submit" value="{% if transaction %}Save changes{% else %}Add transaction{% endif %}">
-                </form>
             </div>
         </div>
 
+        <h2 class="h5 mt-5 mb-3">Transaction history</h2>
         {% include 'portfolio/partials/transactions_table.html' %}
-
         {% include 'common/partials/pagination.html' %}
     </div>
 {% endblock %}

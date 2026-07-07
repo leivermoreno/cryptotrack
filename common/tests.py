@@ -18,6 +18,7 @@ from django.test import RequestFactory, SimpleTestCase, override_settings
 from common.decorators.views import validate_common_params
 from common.templatetags.common_extras import (
     format_amount,
+    format_compact,
     format_number,
     format_percentage,
     pagination_query,
@@ -130,6 +131,34 @@ class FormatAmountTests(SimpleTestCase):
             format_amount(Decimal("999999999999.99")),
             "$999,999,999,999.99",
         )
+
+
+class FormatCompactTests(SimpleTestCase):
+    """Characterize common_extras.format_compact."""
+
+    def test_none_passes_through_dash(self):
+        self.assertEqual(format_compact(None), "-")
+
+    def test_invalid_string_passes_through_dash(self):
+        self.assertEqual(format_compact("abc"), "-")
+
+    def test_trillions_are_abbreviated(self):
+        self.assertEqual(format_compact(Decimal("1234000000000")), "$1.23T")
+
+    def test_billions_are_abbreviated(self):
+        self.assertEqual(format_compact(Decimal("45600000000")), "$45.6B")
+
+    def test_millions_are_abbreviated(self):
+        self.assertEqual(format_compact(Decimal("9800000")), "$9.8M")
+
+    def test_trailing_zeros_are_trimmed(self):
+        self.assertEqual(format_compact(Decimal("2000000000")), "$2B")
+
+    def test_below_one_million_falls_back_to_full_amount(self):
+        self.assertEqual(format_compact(Decimal("123456")), "$123,456")
+
+    def test_negative_value_keeps_sign(self):
+        self.assertEqual(format_compact(Decimal("-2500000000")), "-$2.5B")
 
 
 class FormatPercentageTests(SimpleTestCase):
@@ -612,19 +641,19 @@ class PaginationPartialTests(SimpleTestCase):
 
     def test_first_page_has_next_only(self):
         html = self._render(1)
-        self.assertIn(">next</a>", html)
-        self.assertNotIn(">previous</a>", html)
+        self.assertIn("bi-chevron-right", html)
+        self.assertNotIn("bi-chevron-left", html)
         self.assertIn("page=2", html)
 
     def test_middle_page_has_previous_and_next(self):
         html = self._render(2)
-        self.assertIn(">previous</a>", html)
-        self.assertIn(">next</a>", html)
+        self.assertIn("bi-chevron-left", html)
+        self.assertIn("bi-chevron-right", html)
 
     def test_last_page_has_previous_only(self):
         html = self._render(3)
-        self.assertIn(">previous</a>", html)
-        self.assertNotIn(">next</a>", html)
+        self.assertIn("bi-chevron-left", html)
+        self.assertNotIn("bi-chevron-right", html)
 
     def test_links_use_request_path_and_preserve_sort_direction_search(self):
         html = self._render(2)

@@ -2,7 +2,15 @@
 
 {% block content %}
     <div class="container">
-        <h1 class="my-5">{% block title %}All transactions{% endblock %}</h1>
+        <header class="page-header d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-end gap-3">
+            <div>
+                <h1 class="page-title">{% block title %}All transactions{% endblock %}</h1>
+                <p class="page-subtitle">Every buy and sell across your portfolio.</p>
+            </div>
+            <a href="{% url 'portfolio:overview' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to portfolio
+            </a>
+        </header>
 
         {% include 'portfolio/partials/transactions_table.html' with show_coin_name=True %}
         {% include 'common/partials/pagination.html' %}

@@ -1,10 +1,10 @@
 {% load common_extras %}
 
 <div class="table-responsive">
-    <table class="table table-hover text-center">
-        <thead class="position-sticky top-0 bg-light">
+    <table class="table table-hover table-pin-first table-compact align-middle mb-0">
+        <thead>
         <tr>
-            <th>
+            <th class="text-center">
                 {% if is_watchlist %}
                     #
                 {% else %}
@@ -12,42 +12,44 @@
                 {% endif %}
             </th>
             <th class="text-start">{% sort_link 'coin' page_number sort direction search_query 'Coin' %}</th>
-            <th>{% sort_link 'price' page_number sort direction search_query 'Price' %}</th>
-            <th>{% sort_link 'price_change_24h' page_number sort direction search_query '24h' %}</th>
-            <th>{% sort_link 'price_change_7d' page_number sort direction search_query '7d' %}</th>
-            <th>{% sort_link 'ath' page_number sort direction search_query 'ATH' %}</th>
-            <th>{% sort_link 'volume' page_number sort direction search_query '24h Volume' %}</th>
-            <th>{% sort_link 'market_cap' page_number sort direction search_query 'Market Cap' %}</th>
-            <th class="text-nowrap">Actions</th>
+            <th class="text-end">{% sort_link 'price' page_number sort direction search_query 'Price' %}</th>
+            <th class="text-end">{% sort_link 'price_change_24h' page_number sort direction search_query '24h' %}</th>
+            <th class="text-end d-none d-md-table-cell">{% sort_link 'price_change_7d' page_number sort direction search_query '7d' %}</th>
+            <th class="text-end d-none d-lg-table-cell">{% sort_link 'ath' page_number sort direction search_query 'ATH' %}</th>
+            <th class="text-end d-none d-lg-table-cell">{% sort_link 'volume' page_number sort direction search_query '24h Vol' %}</th>
+            <th class="text-end d-none d-md-table-cell">{% sort_link 'market_cap' page_number sort direction search_query 'Market Cap' %}</th>
+            <th class="text-end">Actions</th>
         </tr>
         </thead>
 
         <tbody>
         {% for coin in coin_list %}
             <tr>
-                <th>
+                <td class="text-center text-muted">
                     {% if is_watchlist %}
                         {{ forloop.counter }}
                     {% else %}
                         {{ coin.market_cap_rank|default:"-" }}
                     {% endif %}
-                </th>
-                <td class="text-start">
-                    {{ coin.name }} -
-                    <span class="fw-bold text-primary">{{ coin.symbol }}</span>
                 </td>
-                <td>{{ coin.current_price|format_amount }}</td>
-                <td class="{{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}">
-                    {{ coin.price_change_percentage_24h_in_currency|format_percentage }}
+                <td class="text-start coin-cell">
+                    <span class="coin-name" title="{{ coin.name }}">{{ coin.name }}</span>
+                    <span class="coin-symbol">{{ coin.symbol }}</span>
                 </td>
-                <td class="{{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}">
+                <td class="text-end">{{ coin.current_price|format_amount }}</td>
+                <td class="text-end">
+                    <span class="pill {{ coin.price_change_percentage_24h_in_currency|percentage_change_class }}">
+                        {{ coin.price_change_percentage_24h_in_currency|format_percentage }}
+                    </span>
+                </td>
+                <td class="text-end d-none d-md-table-cell {{ coin.price_change_percentage_7d_in_currency|percentage_change_class }}">
                     {{ coin.price_change_percentage_7d_in_currency|format_percentage }}
                 </td>
-                <td>{{ coin.ath|format_amount }}</td>
-                <td>{{ coin.total_volume|format_amount }}</td>
-                <td>{{ coin.market_cap|format_amount }}</td>
-                <td class="text-nowrap">
-                    <div class="d-inline-flex align-items-center justify-content-center gap-1">
+                <td class="text-end d-none d-lg-table-cell">{{ coin.ath|format_amount }}</td>
+                <td class="text-end d-none d-lg-table-cell">{{ coin.total_volume|format_compact }}</td>
+                <td class="text-end d-none d-md-table-cell">{{ coin.market_cap|format_compact }}</td>
+                <td class="text-end text-nowrap">
+                    <div class="d-inline-flex align-items-center justify-content-end gap-1">
                         <form action="{% url 'coins:add_remove_to_watchlist' coin.cg_id %}" method="post" class="m-0">
                             {% csrf_token %}
                             {% pagination_query page_number sort direction search_query search_query as next_query %}

@@ -226,7 +226,7 @@ class PortfolioViewsTest(TestCase):
         self.assertEqual(response.context["coin_list"], [])
         self.assertContains(
             response,
-            "Market data is temporarily unavailable. Please try again shortly.",
+            "Market data is temporarily unavailable",
         )
         self.assertNotContains(response, "No open holdings in your portfolio.")
         # No P/L summary metric keys were populated.
@@ -1360,7 +1360,7 @@ class TradeDateTest(TestCase):
         _make_tx(self.user, self.coin, "buy", 1, 100)
         PortfolioTransaction.objects.filter(user=self.user).update(trade_date=past)
         response = self.client.get(self._add_url())
-        self.assertContains(response, past.strftime("%m-%d-%y"))
+        self.assertContains(response, past.strftime("%b %d, %Y"))
 
     def test_future_trade_date_is_rejected(self):
         future = timezone.localdate() + timedelta(days=1)

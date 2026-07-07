@@ -1,6 +1,10 @@
-<form action="{% url 'coins:search' %}" class="ms-auto flex-grow-0">
+<form action="{% url 'coins:search' %}" class="search-form w-100 my-2 my-lg-0">
     <div class="input-group">
-        <input type="text" name="search" value="{{ request.GET.search }}" id="search" class="form-control" placeholder="Search for a coin">
-        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        <span class="input-group-text bg-transparent border-end-0 text-muted">
+            <i class="bi bi-search"></i>
+        </span>
+        <input type="text" name="search" value="{{ request.GET.search }}" id="search"
+               class="form-control border-start-0 ps-0" placeholder="Search coins…"
+               aria-label="Search for a coin">
     </div>
 </form>

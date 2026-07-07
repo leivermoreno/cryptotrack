@@ -4,39 +4,56 @@
 
 {% block content %}
     <div class="container">
-        <h1 class="my-5">{% block title %}Delete transaction{% endblock %}</h1>
+        <header class="page-header">
+            <h1 class="page-title">{% block title %}Delete transaction{% endblock %}</h1>
+        </header>
 
-        <div class="alert alert-warning" role="alert">
-            Delete this {{ transaction.get_type_display|lower }} transaction for {{ coin.name }}?
+        <div class="row">
+            <div class="col-lg-7 col-xl-6">
+                <div class="card">
+                    <div class="card-body p-4">
+                        <div class="alert alert-warning d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <span>Delete this {{ transaction.get_type_display|lower }} transaction for {{ coin.name }}? This can't be undone.</span>
+                        </div>
+
+                        <dl class="row mb-0">
+                            <dt class="col-5 col-sm-4 text-muted fw-normal">Coin</dt>
+                            <dd class="col-7 col-sm-8">{{ coin.name }} <span class="coin-symbol">{{ coin.symbol }}</span>{% if not coin.is_active %} <span class="badge text-bg-secondary">Delisted</span>{% endif %}</dd>
+
+                            <dt class="col-5 col-sm-4 text-muted fw-normal">Type</dt>
+                            <dd class="col-7 col-sm-8">{{ transaction.get_type_display }}</dd>
+
+                            <dt class="col-5 col-sm-4 text-muted fw-normal">Amount</dt>
+                            <dd class="col-7 col-sm-8 tabular">{{ transaction.amount|format_number }}</dd>
+
+                            <dt class="col-5 col-sm-4 text-muted fw-normal">Price per coin</dt>
+                            <dd class="col-7 col-sm-8 tabular">{{ transaction.price|format_amount }}</dd>
+
+                            <dt class="col-5 col-sm-4 text-muted fw-normal">Total value</dt>
+                            <dd class="col-7 col-sm-8 tabular">{{ transaction_total|format_amount }}</dd>
+
+                            <dt class="col-5 col-sm-4 text-muted fw-normal">Trade date</dt>
+                            <dd class="col-7 col-sm-8 mb-0">{{ transaction.trade_date|date:"M d, Y" }}</dd>
+                        </dl>
+
+                        <hr>
+
+                        <div class="d-flex gap-2">
+                            <form action="{% url 'portfolio:delete_transaction' coin_id=coin.id transaction_id=transaction.id %}" method="post">
+                                {% csrf_token %}
+                                {% if next_url %}
+                                    <input type="hidden" name="next" value="{{ next_url }}">
+                                {% endif %}
+                                <button type="submit" class="btn btn-danger">
+                                    <i class="bi bi-trash me-1"></i>Delete transaction
+                                </button>
+                            </form>
+                            <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Cancel</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-
-        <dl class="row mb-4">
-            <dt class="col-sm-3">Coin</dt>
-            <dd class="col-sm-9">{{ coin.name }} - <span class="fw-bold text-primary">{{ coin.symbol }}</span>{% if not coin.is_active %} <span class="badge bg-secondary">Delisted</span>{% endif %}</dd>
-
-            <dt class="col-sm-3">Type</dt>
-            <dd class="col-sm-9">{{ transaction.get_type_display }}</dd>
-
-            <dt class="col-sm-3">Amount</dt>
-            <dd class="col-sm-9">{{ transaction.amount|format_number }}</dd>
-
-            <dt class="col-sm-3">Price per coin</dt>
-            <dd class="col-sm-9">{{ transaction.price|format_amount }}</dd>
-
-            <dt class="col-sm-3">Total value</dt>
-            <dd class="col-sm-9">{{ transaction_total|format_amount }}</dd>
-
-            <dt class="col-sm-3">Trade date</dt>
-            <dd class="col-sm-9">{{ transaction.trade_date|date:"m-d-y" }}</dd>
-        </dl>
-
-        <form action="{% url 'portfolio:delete_transaction' coin_id=coin.id transaction_id=transaction.id %}" method="post" class="d-inline">
-            {% csrf_token %}
-            {% if next_url %}
-                <input type="hidden" name="next" value="{{ next_url }}">
-            {% endif %}
-            <button type="submit" class="btn btn-danger">Delete transaction</button>
-        </form>
-        <a href="{{ cancel_url }}" class="btn btn-secondary ms-2">Cancel</a>
     </div>
 {% endblock %}

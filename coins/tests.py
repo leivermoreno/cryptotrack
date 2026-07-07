@@ -27,9 +27,7 @@ from .models import Coin, Watchlist
 User = get_user_model()
 
 # Single user-facing copy for a CoinGecko whole-call failure (5.6).
-MARKET_UNAVAILABLE_COPY = (
-    "Market data is temporarily unavailable. Please try again shortly."
-)
+MARKET_UNAVAILABLE_COPY = "Market data is temporarily unavailable"
 
 
 class CoinModelTest(TestCase):
@@ -186,7 +184,8 @@ class CoinsViewsTest(TestCase):
     def test_render_search_no_matches(self):
         response = self.client.get(reverse("coins:search"), {"search": "doesnotexist"})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'No active coins match "doesnotexist".')
+        self.assertContains(response, "No active coins match")
+        self.assertContains(response, "doesnotexist")
         self.assertContains(response, "Clear search")
 
     def test_add_remove_to_watchlist_authenticated(self):

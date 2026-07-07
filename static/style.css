@@ -1,3 +1,68 @@
+/* ==========================================================================
+   CryptoTrack — design system
+   Layered on Bootstrap 5.3. Themeable via [data-bs-theme] tokens below.
+   ========================================================================== */
+
+/* ---- Design tokens ---- */
+:root {
+    /* Brand accent (indigo) */
+    --ct-accent: #6366f1;
+    --ct-accent-rgb: 99, 102, 241;
+    --ct-accent-hover: #4f46e5;
+
+    /* Surfaces */
+    --ct-bg: #f5f6fb;
+    --ct-surface: #ffffff;
+    --ct-surface-2: #f1f3f9;
+    --ct-border: #e6e8f0;
+    --ct-text: #191c26;
+    --ct-muted: #667085;
+
+    --ct-shadow-sm: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .06);
+    --ct-shadow: 0 4px 12px -2px rgba(16, 24, 40, .08), 0 2px 6px -2px rgba(16, 24, 40, .05);
+    --ct-shadow-lg: 0 24px 48px -12px rgba(16, 24, 40, .18);
+
+    --ct-radius: .75rem;
+    --ct-radius-lg: 1rem;
+
+    /* Map Bootstrap component vars onto our tokens */
+    --bs-body-bg: var(--ct-bg);
+    --bs-body-color: var(--ct-text);
+    --bs-primary: var(--ct-accent);
+    --bs-primary-rgb: var(--ct-accent-rgb);
+    --bs-link-color-rgb: var(--ct-accent-rgb);
+    --bs-link-hover-color-rgb: 79, 70, 229;
+    --bs-border-color: var(--ct-border);
+    --bs-secondary-bg: var(--ct-surface-2);
+    --bs-tertiary-bg: var(--ct-surface-2);
+    --bs-secondary-color: var(--ct-muted);
+    --bs-emphasis-color: var(--ct-text);
+    --bs-border-radius: var(--ct-radius);
+}
+
+[data-bs-theme="dark"] {
+    --ct-accent: #818cf8;
+    --ct-accent-rgb: 129, 140, 248;
+    --ct-accent-hover: #a5b4fc;
+
+    --ct-bg: #0d1117;
+    --ct-surface: #161b22;
+    --ct-surface-2: #1b2230;
+    --ct-border: #283042;
+    --ct-text: #e6edf3;
+    --ct-muted: #97a1b2;
+
+    --ct-shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
+    --ct-shadow: 0 6px 18px -6px rgba(0, 0, 0, .5);
+    --ct-shadow-lg: 0 24px 50px -12px rgba(0, 0, 0, .65);
+
+    --bs-body-bg: var(--ct-bg);
+    --bs-body-color: var(--ct-text);
+    --bs-link-hover-color-rgb: 165, 180, 252;
+    --bs-emphasis-color: #ffffff;
+}
+
+/* ---- Base ---- */
 html, body {
     min-height: 100vh;
 }
@@ -5,13 +70,473 @@ html, body {
 body {
     display: flex;
     flex-direction: column;
+    background: var(--ct-bg);
+    color: var(--ct-text);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04";
 }
 
+.app-main {
+    padding-bottom: 2.5rem;
+}
+
+/* Numeric alignment for financial figures */
+.table td, .table th,
+.tabular {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Accent hooks that Bootstrap compiles to hardcoded hex */
+.btn-primary {
+    --bs-btn-bg: var(--ct-accent);
+    --bs-btn-border-color: var(--ct-accent);
+    --bs-btn-hover-bg: var(--ct-accent-hover);
+    --bs-btn-hover-border-color: var(--ct-accent-hover);
+    --bs-btn-active-bg: var(--ct-accent-hover);
+    --bs-btn-active-border-color: var(--ct-accent-hover);
+    --bs-btn-disabled-bg: var(--ct-accent);
+    --bs-btn-disabled-border-color: var(--ct-accent);
+    --bs-btn-focus-shadow-rgb: var(--ct-accent-rgb);
+}
+
+.btn-outline-primary {
+    --bs-btn-color: var(--ct-accent);
+    --bs-btn-border-color: var(--ct-accent);
+    --bs-btn-hover-bg: var(--ct-accent);
+    --bs-btn-hover-border-color: var(--ct-accent);
+    --bs-btn-active-bg: var(--ct-accent);
+    --bs-btn-active-border-color: var(--ct-accent);
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--ct-accent);
+    box-shadow: 0 0 0 .2rem rgba(var(--ct-accent-rgb), .2);
+}
+
+/* ---- Navbar ---- */
+.app-navbar {
+    background: var(--ct-surface);
+    background: color-mix(in srgb, var(--ct-surface) 88%, transparent);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--ct-border);
+}
+
+.navbar-brand {
+    font-weight: 700;
+    letter-spacing: -.02em;
+    color: var(--ct-text);
+}
+
+.brand-accent {
+    color: var(--ct-accent);
+}
+
+.brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: .6rem;
+    background: linear-gradient(135deg, var(--ct-accent), var(--ct-accent-hover));
+    color: #fff;
+    font-size: 1.05rem;
+    box-shadow: 0 4px 10px -2px rgba(var(--ct-accent-rgb), .55);
+}
+
+.brand-mark-sm {
+    width: 1.5rem;
+    height: 1.5rem;
+    font-size: .8rem;
+    border-radius: .45rem;
+}
+
+.app-navbar .nav-link {
+    font-weight: 500;
+    border-radius: .5rem;
+    padding-inline: .75rem;
+    color: var(--ct-muted);
+}
+
+.app-navbar .nav-link:hover,
+.app-navbar .nav-link:focus {
+    color: var(--ct-text);
+    background: var(--ct-surface-2);
+}
+
+.app-navbar .nav-link.active {
+    color: var(--ct-accent);
+    background: rgba(var(--ct-accent-rgb), .1);
+}
+
+.user-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--ct-surface-2);
+    border: 1px solid var(--ct-border);
+    color: var(--ct-text);
+}
+
+/* ---- Icon + theme toggle buttons ---- */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border-radius: .6rem;
+    border: 1px solid var(--ct-border);
+    background: var(--ct-surface);
+    color: var(--ct-text);
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+
+.btn-icon:hover {
+    background: var(--ct-surface-2);
+    color: var(--ct-accent);
+    border-color: var(--ct-accent);
+}
+
+.theme-toggle .theme-icon-light {
+    display: none;
+}
+
+[data-bs-theme="dark"] .theme-toggle .theme-icon-dark {
+    display: none;
+}
+
+[data-bs-theme="dark"] .theme-toggle .theme-icon-light {
+    display: inline;
+}
+
+/* ---- Search form ---- */
+.search-form {
+    max-width: 22rem;
+}
+
+.search-form .form-control,
+.search-form .btn {
+    background: var(--ct-surface);
+    border-color: var(--ct-border);
+}
+
+.search-form .form-control::placeholder {
+    color: var(--ct-muted);
+}
+
+/* ---- Page header ---- */
+.page-header {
+    margin: 2rem 0 1.5rem;
+}
+
+.page-title {
+    font-weight: 700;
+    letter-spacing: -.02em;
+    margin: 0;
+}
+
+.page-subtitle {
+    color: var(--ct-muted);
+    margin: .35rem 0 0;
+}
+
+/* ---- Cards / surfaces ---- */
+.card,
+.surface {
+    background: var(--ct-surface);
+    border: 1px solid var(--ct-border);
+    border-radius: var(--ct-radius-lg);
+    box-shadow: var(--ct-shadow-sm);
+}
+
+.card {
+    --bs-card-bg: var(--ct-surface);
+    --bs-card-border-color: var(--ct-border);
+    --bs-card-border-radius: var(--ct-radius-lg);
+}
+
+/* ---- Stat tiles ---- */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--ct-surface);
+    border: 1px solid var(--ct-border);
+    border-radius: var(--ct-radius);
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--ct-shadow-sm);
+}
+
+.stat-label {
+    font-size: .78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ct-muted);
+    margin: 0 0 .35rem;
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+}
+
+.stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    margin: 0;
+    line-height: 1.15;
+}
+
+/* ---- Change / P&L pill ---- */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    gap: .2rem;
+    font-size: .82rem;
+    font-weight: 600;
+    padding: .12rem .5rem;
+    border-radius: 2rem;
+    line-height: 1.4;
+}
+
+.pill.text-success {
+    background: rgba(25, 135, 84, .12);
+}
+
+.pill.text-danger {
+    background: rgba(220, 53, 69, .12);
+}
+
+/* ---- Data tables ---- */
+.data-card {
+    background: var(--ct-surface);
+    border: 1px solid var(--ct-border);
+    border-radius: var(--ct-radius-lg);
+    box-shadow: var(--ct-shadow-sm);
+    overflow: hidden;
+}
+
+.data-card .table-responsive {
+    border-radius: inherit;
+}
+
+.data-card .table {
+    --bs-table-bg: transparent;
+    --bs-table-hover-bg: var(--ct-surface-2);
+    margin: 0;
+    color: var(--ct-text);
+}
+
+.data-card .table > thead {
+    background: var(--ct-surface-2);
+}
+
+.data-card .table > thead th {
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ct-muted);
+    border-bottom: 1px solid var(--ct-border);
+    padding: .75rem 1rem;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.data-card .table > thead th a {
+    color: inherit;
+    font-weight: 600;
+}
+
+.data-card .table > thead th a:hover {
+    color: var(--ct-accent);
+}
+
+.data-card .table > tbody td,
+.data-card .table > tbody th {
+    padding: .85rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--ct-border);
+    font-weight: 500;
+}
+
+.data-card .table > tbody tr:last-child td,
+.data-card .table > tbody tr:last-child th {
+    border-bottom: 0;
+}
+
+.data-card .table > tbody tr {
+    transition: background-color .12s ease;
+}
+
+/* Compact variant: tighter cells so a wide table fits without scroll */
+.data-card .table.table-compact > thead th,
+.data-card .table.table-compact > tbody td,
+.data-card .table.table-compact > tbody th {
+    padding-inline: .65rem;
+}
+
+.data-card .table.table-compact > thead th:first-child,
+.data-card .table.table-compact > tbody tr > :first-child {
+    padding-left: 1rem;
+}
+
+.data-card .table.table-compact > thead th:last-child,
+.data-card .table.table-compact > tbody tr > :last-child {
+    padding-right: 1rem;
+}
+
+/* Sticky first column while scrolling wide tables */
+.table-pin-first thead th:first-child,
+.table-pin-first tbody tr > :first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--ct-surface);
+}
+
+.table-pin-first thead th:first-child {
+    background: var(--ct-surface-2);
+    z-index: 2;
+}
+
+.table-pin-first tbody tr:hover > :first-child {
+    background: var(--ct-surface-2);
+}
+
+/* Coin identity cell */
+.coin-cell {
+    font-weight: 600;
+}
+
+/* Truncate long coin names with an ellipsis (full name in title attr) */
+.coin-name {
+    display: inline-block;
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+.coin-symbol {
+    color: var(--ct-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: .8em;
+}
+
+/* Buy / Sell segmented toggle on the transaction form */
+.tx-type-toggle {
+    display: flex;
+}
+
+.tx-type-toggle .btn {
+    flex: 1 1 0;
+    font-weight: 600;
+}
+
+/* Type badges for transactions */
+.tx-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    font-size: .78rem;
+    font-weight: 600;
+    padding: .2rem .55rem;
+    border-radius: 2rem;
+}
+
+.tx-badge-buy {
+    color: #198754;
+    background: rgba(25, 135, 84, .12);
+}
+
+.tx-badge-sell {
+    color: #dc3545;
+    background: rgba(220, 53, 69, .12);
+}
+
+/* Compact action icon button (kept from prior UI) */
 .action-icon-btn {
     align-items: center;
     display: inline-flex;
-    height: 1.75rem;
+    height: 2rem;
+    width: 2rem;
     justify-content: center;
     padding: 0;
-    width: 1.75rem;
+    border-radius: .5rem;
+}
+
+.action-icon-btn:hover {
+    background: var(--ct-surface-2);
+}
+
+/* ---- Pagination ---- */
+.pagination-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem .25rem;
+    flex-wrap: wrap;
+}
+
+.page-indicator {
+    font-size: .9rem;
+    color: var(--ct-muted);
+    font-weight: 500;
+}
+
+.page-indicator strong {
+    color: var(--ct-text);
+}
+
+/* ---- Empty / status states ---- */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    background: var(--ct-surface);
+    border: 1px dashed var(--ct-border);
+    border-radius: var(--ct-radius-lg);
+}
+
+.empty-state .empty-icon {
+    font-size: 2.25rem;
+    color: var(--ct-muted);
+    margin-bottom: .5rem;
+}
+
+/* ---- Footer ---- */
+.app-footer {
+    border-top: 1px solid var(--ct-border);
+    background: var(--ct-surface);
+    padding: 1.25rem 0;
+    font-size: .9rem;
+}
+
+/* ---- Auth cards ---- */
+.auth-card {
+    max-width: 26rem;
+    margin-inline: auto;
+}
+
+@media (max-width: 575.98px) {
+    .page-title {
+        font-size: 1.6rem;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+    }
 }

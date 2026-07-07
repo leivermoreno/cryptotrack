@@ -1,19 +1,25 @@
 {% load common_extras %}
-<div class="pagination py-3 d-flex justify-content-between align-items-center flex-grow-1">
+<nav class="pagination-bar" aria-label="Pagination">
     {% if pagination_back_url and pagination_back_label %}
-        <a href="{{ pagination_back_url }}" class="btn btn-secondary">{{ pagination_back_label }}</a>
+        <a href="{{ pagination_back_url }}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>{{ pagination_back_label }}
+        </a>
     {% endif %}
-    <span class="step-link ms-auto">
+    <div class="d-flex align-items-center gap-2 ms-auto">
         {% if page_obj.has_previous %}
             {% pagination_query page_obj.previous_page_number sort direction search_query send_search as previous_query %}
-            <a class="text-decoration-none me-3" href="{{ request.path }}?{{ previous_query }}">previous</a>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ request.path }}?{{ previous_query }}">
+                <i class="bi bi-chevron-left me-1"></i>Prev
+            </a>
         {% endif %}
 
-        {{ page_obj.number }}
+        <span class="page-indicator">Page <strong>{{ page_obj.number }}</strong></span>
 
         {% if page_obj.has_next %}
             {% pagination_query page_obj.next_page_number sort direction search_query send_search as next_query %}
-            <a class="text-decoration-none ms-3" href="{{ request.path }}?{{ next_query }}">next</a>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ request.path }}?{{ next_query }}">
+                Next<i class="bi bi-chevron-right ms-1"></i>
+            </a>
         {% endif %}
-    </span>
-</div>
+    </div>
+</nav>

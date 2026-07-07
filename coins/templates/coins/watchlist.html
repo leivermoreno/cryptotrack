@@ -2,19 +2,26 @@
 
 {% block content %}
     <div class="container">
-        <h1 class="my-5">{% block title %}Your Watchlist{% endblock %}</h1>
+        <header class="page-header">
+            <h1 class="page-title">{% block title %}Watchlist{% endblock %}</h1>
+            <p class="page-subtitle">Coins you're keeping an eye on.</p>
+        </header>
+
         {% if market_unavailable %}
             {% include "common/partials/market_unavailable.html" %}
         {% elif coin_list %}
-            {% include "coins/partials/coins_table.html" with page_number=page_obj.number is_watchlist=True %}
-        {% else %}
-            <div class="alert alert-info">
-                Your watchlist is empty.
-                <a href="{% url 'coins:index' %}" class="alert-link">Browse market</a>
+            <div class="data-card">
+                {% include "coins/partials/coins_table.html" with page_number=page_obj.number is_watchlist=True %}
             </div>
-        {% endif %}
-        {% if not market_unavailable %}
             {% include "common/partials/pagination.html" %}
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-icon"><i class="bi bi-eye"></i></div>
+                <p class="mb-2">Your watchlist is empty.</p>
+                <a href="{% url 'coins:index' %}" class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-compass me-1"></i>Browse market
+                </a>
+            </div>
         {% endif %}
     </div>
 {% endblock content %}

@@ -161,7 +161,7 @@ class RegisterViewTest(TestCase):
         self.assertContains(
             response, "Your account has been created. You can now log in."
         )
-        self.assertContains(response, 'class="alert alert-success"')
+        self.assertContains(response, "alert-success")
 
     def test_register_post_valid_preserves_safe_next_param_to_login(self):
         """After registration, login receives the safe intended destination."""

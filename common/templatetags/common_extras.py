@@ -72,6 +72,33 @@ def format_amount(value):
 
 
 @register.filter(is_safe=True)
+def format_compact(value):
+    """Abbreviate large monetary values (e.g. $1.23T, $45.6B, $9.8M).
+
+    Keeps wide columns (market cap, volume) narrow so tables fit without
+    horizontal scroll. Values below 1M fall back to full ``format_amount``.
+    """
+    value = _to_decimal(value)
+    if value is None:
+        return "-"
+
+    sign = "-" if value < 0 else ""
+    magnitude = abs(value)
+
+    for threshold, suffix in (
+        (Decimal("1e12"), "T"),
+        (Decimal("1e9"), "B"),
+        (Decimal("1e6"), "M"),
+    ):
+        if magnitude >= threshold:
+            scaled = magnitude / threshold
+            out = f"{scaled:.2f}".rstrip("0").rstrip(".")
+            return f"{sign}${out}{suffix}"
+
+    return format_amount(value)
+
+
+@register.filter(is_safe=True)
 def format_percentage(value):
     value = _to_decimal(value)
     if value is None:
