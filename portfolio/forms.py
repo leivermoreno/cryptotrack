@@ -4,6 +4,21 @@ from django.utils import timezone
 from .models import PortfolioTransaction
 
 
+def _strip_trailing_zeros(value):
+    """Drop the fixed 8-place padding stored on DecimalFields for display.
+
+    Formats in plain (non-exponent) notation and trims trailing fractional
+    zeros, so ``Decimal('0.50000000')`` renders as ``0.5`` and
+    ``Decimal('100.00000000')`` as ``100`` in the number inputs. Returns a
+    string; ``Decimal.normalize()`` is avoided because it emits exponent form
+    for both whole numbers (``1E+2``) and tiny values (``1E-8``).
+    """
+    text = format(value, "f")
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
 class PortfolioTransactionForm(ModelForm):
     class Meta:
         model = PortfolioTransaction
@@ -28,6 +43,13 @@ class PortfolioTransactionForm(ModelForm):
         # instance's stored value.
         if not self.is_bound and self.instance.pk is None:
             self.fields["trade_date"].initial = timezone.localdate()
+        # Strip the 8-place decimal padding when rendering existing values on
+        # the edit path, so the number inputs don't show trailing zeros.
+        if not self.is_bound and self.instance.pk is not None:
+            for name in ("amount", "price"):
+                value = self.initial.get(name)
+                if value is not None:
+                    self.initial[name] = _strip_trailing_zeros(value)
 
     def clean_amount(self):
         amount = self.cleaned_data["amount"]
