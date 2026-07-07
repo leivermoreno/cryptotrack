@@ -46,7 +46,9 @@ docker build --target prod -t cryptotrack:prod .    # build the production image
 ```
 
 On Railway, migrate/createcachetable/sync run as `preDeployCommand` (not in the
-image); `collectstatic` is baked in at build. Deploy as two services from the
+image) — `railway.json` points it at `scripts/railway-predeploy.sh`, which runs
+`migrate --noinput`, `createcachetable`, then `sync_supported_coins || true` (a
+CoinGecko outage must not block the deploy). `collectstatic` is baked in at build. Deploy as two services from the
 same image (`web` default start command, `worker` overriding to
 `runapscheduler`), and set `DATABASE_URI=${{Postgres.DATABASE_URL}}` since
 settings read `DATABASE_URI`, not Railway's default `DATABASE_URL`. See the
@@ -70,7 +72,7 @@ Loaded from a `.env` file in the project root (via python-dotenv) or the process
 `settings.py` has an `if not DEBUG:` block (right after the `CSRF_TRUSTED_ORIGINS` prod branch) that hardens the deployment. Target is Railway/PaaS — TLS terminates at the platform edge and requests reach the app over plaintext HTTP. All knobs have safe defaults, so they can be left unset.
 
 - `TRUST_PROXY_SSL_HEADER` — bool, default `false`. When true, sets `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")`. **Must be `true` on Railway.** Two failure modes: enabling it without a header-stripping proxy trusts a spoofable header; leaving it off *behind* a TLS-terminating proxy makes `SECURE_SSL_REDIRECT` loop forever (`301 → 301 → …`).
-- `SECURE_SSL_REDIRECT` — bool, default `true`. Env-overridable as an incident kill-switch. **Health-check interaction (step 16):** an internal-HTTP health check without `X-Forwarded-Proto: https` gets a `301`; mitigate with `SECURE_REDIRECT_EXEMPT` for the health path or health-check the public HTTPS domain.
+- `SECURE_SSL_REDIRECT` — bool, default `true`. Env-overridable as an incident kill-switch. **Health-check interaction:** an internal-HTTP health check without `X-Forwarded-Proto: https` would get a `301`. `settings.py` already exempts the liveness path — `SECURE_REDIRECT_EXEMPT = [r"^healthz$"]` (hardcoded in the `if not DEBUG` block) — so the `GET /healthz` probe returns `200` over plaintext HTTP without hitting the redirect.
 - `SECURE_HSTS_SECONDS` — int, default `3600` (1h). HSTS is a hard-to-reverse browser commitment; ramp up manually (1h → 1d → 1wk → 1yr / `31536000`) only after HTTPS is proven.
 - `SECURE_HSTS_INCLUDE_SUBDOMAINS` / `SECURE_HSTS_PRELOAD` — bool, both default `false`; keep off until HSTS has run at a long max-age (preload is effectively irreversible).
 - `SESSION_COOKIE_SECURE` / `CSRF_COOKIE_SECURE` — hardcoded `True` in production (no env knob).
@@ -79,10 +81,12 @@ Loaded from a `.env` file in the project root (via python-dotenv) or the process
 Production runs two decoupled processes declared in the `Procfile`: `web`
 (`gunicorn crypto_track.wsgi:application`, the only HTTP server; WhiteNoise serves
 static in-process) and `worker` (`runapscheduler`, an optional blocking scheduler
-for catalog re-sync). One-shot release steps run in order — `migrate`,
-`createcachetable`, `collectstatic`, `sync_supported_coins` — before `web` serves
-traffic. Liveness is `GET /healthz`. See the **Deployment (Production)** section
-of `README.md` for the single source of truth.
+for catalog re-sync). One-shot release steps run before `web` serves traffic:
+`collectstatic` is baked into the image at build, and `migrate` →
+`createcachetable` → `sync_supported_coins` run as the Railway `preDeployCommand`
+(`scripts/railway-predeploy.sh`), not from the `Procfile`. Liveness is
+`GET /healthz`. See the **Deployment (Production)** section of `README.md` for the
+single source of truth.
 
 ## Architecture
 
