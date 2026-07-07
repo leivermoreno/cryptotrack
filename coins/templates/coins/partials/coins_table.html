@@ -33,8 +33,10 @@
                     {% endif %}
                 </td>
                 <td class="text-start coin-cell">
-                    <span class="coin-name" title="{{ coin.name }}">{{ coin.name }}</span>
-                    <span class="coin-symbol">{{ coin.symbol }}</span>
+                    <div class="coin-identity">
+                        <span class="coin-name" title="{{ coin.name }}">{{ coin.name }}</span>
+                        <span class="coin-symbol">{{ coin.symbol }}</span>
+                    </div>
                 </td>
                 <td class="text-end">{{ coin.current_price|format_amount }}</td>
                 <td class="text-end">

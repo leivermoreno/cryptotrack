@@ -419,17 +419,25 @@ body {
     font-weight: 600;
 }
 
+/* Keep the name and symbol on a single line; the name shrinks (with an
+   ellipsis) so the symbol always sits beside it, never stacked below. */
+.coin-identity {
+    display: flex;
+    align-items: baseline;
+    gap: .4rem;
+    max-width: 12rem;
+}
+
 /* Truncate long coin names with an ellipsis (full name in title attr) */
 .coin-name {
-    display: inline-block;
-    max-width: 9rem;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    vertical-align: bottom;
 }
 
 .coin-symbol {
+    flex: none;
     color: var(--ct-muted);
     font-weight: 600;
     text-transform: uppercase;
